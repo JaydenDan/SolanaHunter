@@ -8,6 +8,7 @@ from twikit.client.client import Client
 
 from src.utils.common_util import TaskCounter
 from config import settings
+from ..rules.conditions.twitter_cond import TwitterConditionV1
 from ...account.twitter import TwitterClientManager
 from ...account.twitter.get_account import AccountPool
 from ...notifier.dingtalk import DingTalkClient
@@ -95,7 +96,25 @@ async def _process_token(context: dict):
         #     await self._trigger_actions(context)
 
         # 暂时不走规则，直接钉钉通知
-        await _trigger_actions(context)
+        # TODO 新逻辑：
+        #  如果data['name']、data['symbol']在推特用户的description中出现说明是发行方，那么就推送；
+        #  添加用户是否蓝色认证：is_blue_verified
+        token_name = context['name']
+        token_symbol = context['symbol']
+        user_name = context['social']['user']['name']
+        screen_name = context['social']['user']['screen_name']
+        verified = context['social']['user']['verified']
+        description = context['social']['user']['description']
+        is_blue_verified = context['social']['user']['is_blue_verified']
+        cond = TwitterConditionV1(token_name, token_symbol, user_name, screen_name, description, verified, is_blue_verified)
+        # 判断是否符合规则
+        if cond.judge():
+            logging.info(f"🔥 检测到符合规则的代币，准备通知: CA【{context['mint']}】, Token_name:【{token_name}】, Token_symbol:【{token_symbol}】")
+            await _trigger_actions(context)
+            return True
+        else:
+            logging.info(f"🈚️ 当前代币不符合规则，跳过通知: CA【{context['mint']}】, Token_name:【{token_name}】, Token_symbol:【{token_symbol}】")
+            return False
 
     except Exception as e:
         logging.error(f"处理流水线异常: {context['address']} | {str(e)}")
@@ -123,7 +142,7 @@ async def _search_tweets(client: Client, query: str, product: str, retries: int 
                 logging.warning(f"⚠️️ 当前Twitter搜索类型不合法，已默认为[Latest]")
             # 执行搜索
             search_result = await client.search_tweet(
-                query, validated_product,
+                query, validated_product,  # type: ignore
             )
 
             # 格式化结果
@@ -135,13 +154,15 @@ async def _search_tweets(client: Client, query: str, product: str, retries: int 
                     "user": {
                         "name": tweet.user.name,
                         "screen_name": tweet.user.screen_name,
-                        "verified": tweet.user.verified
+                        "description": tweet.user.description,
+                        "verified": tweet.user.verified,
+                        "is_blue_verified": tweet.user.is_blue_verified
                     },
                     "metrics": {
                         "likes": tweet.favorite_count,
                         "retweets": tweet.retweet_count,
                         "replies": tweet.reply_count,
-                        "view_count": tweet.view_count
+                        "view_count": tweet.view_count if tweet.view_count is not None else 0  # 默认为0
                     }
                 }
                 for tweet in search_result
@@ -271,7 +292,7 @@ class SearchTask:
             if len(tweets) > 0:
                 cas_set = set(current_ca_list)
                 for t in tweets:
-                    # 获取文本中的CA内容
+                    # 获取文本中的CA内容，一般只有一个
                     tcas = await _get_ca(t['text'])
                     for tca in tcas:
                         logging.info(f'🔍️ 当前搜索到的推特帖子内容为【{t["text"]}】')
@@ -325,12 +346,14 @@ class SearchTask:
                                 }
                                 logging.info(f"📺 CA[{tca}]，捕获推文: {t['text']}")
                                 # 处理搜索到帖子的CA
-                                await _process_token(context)
-                                # 删除已处理的CA
-                                if tca in remaining_ca:
-                                    remaining_ca.remove(tca)
-                                    # 删除已处理的token信息
-                                    self.token_list = [item for item in self.token_list if item.get("mint") != tca]
+                                notified = await _process_token(context)
+                                # 如果满足规则通知了，就删除该CA，否则继续搜索下一条推文
+                                if notified:
+                                    # 删除已处理的CA
+                                    if tca in remaining_ca:
+                                        remaining_ca.remove(tca)
+                                        # 删除已处理的token信息
+                                        self.token_list = [item for item in self.token_list if item.get("mint") != tca]
                         else:
                             logging.warning(f"⚠️ 当前推特中的CA【{tca}】不在CA监控名单中，请检查程序逻辑！")
             else:
