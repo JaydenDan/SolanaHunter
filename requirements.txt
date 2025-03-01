@@ -87,3 +87,4 @@ twikit~=2.3.3
 watchdog~=6.0.0
 websockets~=15.0
 colorlog~=6.9.0
+uvicorn~=0.34.0

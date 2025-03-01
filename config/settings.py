@@ -22,3 +22,9 @@ DINGTALK = {
     "client_id": "dingpeuoicagx1l58xhq",
     "client_secret": "SNEzbvO_yPtzcaFmJG5d_D3VggRSJ7cxeLfS_iPmQPocVtsFEhuE-MXVqtGOeZvr"
 }
+
+API = {
+    "host": "localhost",
+    "port": 8848,
+    "key": "asd001122"
+}

@@ -101,7 +101,7 @@ async def _process_token(context: dict):
         logging.error(f"处理流水线异常: {context['address']} | {str(e)}")
 
 
-async def search_tweets(client: Client, query: str, product: str, retries: int = 3) -> list:
+async def _search_tweets(client: Client, query: str, product: str, retries: int = 3) -> list:
     """
     异步搜索推文（带重试机制）
     :param client: 推特客户端
@@ -246,7 +246,7 @@ class SearchTask:
                     # 检查是否需要销毁任务（列表完全空时）
                     if not self.ca_list and not self.token_list:
                         logging.info(
-                            f'当前搜索任务已清空，销毁当前任务。ca_list：{len(self.ca_list)}-【{self.ca_list}】，token_list{len(self.token_list)}-【self.token_list】')
+                            f'🏁 当前搜索任务已清空，销毁当前任务。ca_list：{len(self.ca_list)}-【{self.ca_list}】，token_list{len(self.token_list)}-【{self.token_list}】')
                         await self.account_pool.release(self.account, True)
                         break  # 退出循环，触发 finally 回调
         except Exception as e:
@@ -266,7 +266,7 @@ class SearchTask:
             # 生成搜索关键字
             search_words = await _search_words_maker(current_ca_list)
             # 搜索帖子
-            tweets = await search_tweets(self.client, str(search_words), "Latest")
+            tweets = await _search_tweets(self.client, str(search_words), "Latest")
             # 搜到帖子后就处理帖子
             if len(tweets) > 0:
                 cas_set = set(current_ca_list)

@@ -11,10 +11,11 @@ class SearchTaskManager:
     def __init__(self):
         self.search_tasks = []
         self.manager_lock = asyncio.Lock()
+
         # 新增以下状态管理
-        self._pending_cas = []  # 等待队列
+        self._pending_cas = []  # CA等待队列
         self._is_creating_task = False  # 创建状态锁
-        self._pending_lock = asyncio.Lock()  # 队列操作锁
+        self._pending_lock = asyncio.Lock()  # CA队列操作锁
         self._task_counter = TaskCounter()
 
     # 处理新代币
@@ -89,7 +90,7 @@ class SearchTaskManager:
             if ca_add_failed:
                 async with self._pending_lock:
                     self._pending_cas = ca_add_failed + self._pending_cas
-                    logging.info(f'♻️ 已回收未处理的CA到等待队列，当前CA等待队列【{self._pending_cas}】')
+                    logging.info(f'♻️ 已回收未处理的CA到等待队 列，当前CA等待队列【{self._pending_cas}】')
             # 将成功添加的任务加入列表
             async with self.manager_lock:
                 if ca_added:
@@ -104,7 +105,7 @@ class SearchTaskManager:
                 self._pending_cas = batch + self._pending_cas
         finally:
             async with self._pending_lock:
-                self._is_creating_task = False # 确保任务结束时重置标志
+                self._is_creating_task = False  # 确保任务结束时重置标志
             # 级联触发处理剩余CA
             if self._pending_cas:
                 logging.info(f'_pending_cas中任然有被阻塞的新CA：【{len(self._pending_cas)}】-【{self._pending_cas[:30]}】，开始处理')

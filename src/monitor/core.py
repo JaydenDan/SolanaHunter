@@ -22,6 +22,10 @@ class MonitorCore:
         self.logger = logging.getLogger(__name__)
         self.task_manager = TwitterSearchTaskManager()
 
+        # 新增任务跟踪器
+        self._active_tasks = set()
+        self._shutdown_initiated = asyncio.Event()
+
         # 文件监控配置
         self.observer = Observer()
         self.observer.schedule(
@@ -34,6 +38,11 @@ class MonitorCore:
 
         # 状态管理
         self._running = False
+
+    def _track_task(self, task: asyncio.Task):
+        """自动跟踪任务生命周期"""
+        self._active_tasks.add(task)
+        task.add_done_callback(lambda t: self._active_tasks.discard(t))
 
     async def start(self):
         """启动实时监控系统"""
@@ -54,14 +63,34 @@ class MonitorCore:
         logging.info("🚀 实时监控系统已启动")
 
     async def stop(self):
-        """安全关闭系统"""
-        # TODO 需要添加安全关闭功能 直接关闭系统会直接丢弃代搜索的代币，需要用新号先停止监听新币再把剩余的搜索完再下班
-        self._running = False
+        """分阶段安全关闭（无超时）"""
+        if not self._running:
+            return
+
+        self._shutdown_initiated.set()
+        self.logger.info("🛑 关闭流程启动，停止接收新任务...")
+
+        # 第一步：立即停止区块链监听
         self.listener.stop()
-        await asyncio.get_event_loop().run_in_executor(
-            None, lambda: [self.observer.stop(), self.observer.join()]
-        )
-        self.logger.info("🛑 系统资源已释放")
+        self.logger.info("✅ 区块链监控已停止")
+
+        # 第二步 等待现有任务完成
+        while True:
+            async with self.task_manager.manager_lock:
+                active_count = len(self.task_manager.search_tasks)
+
+            if active_count == 0:
+                break
+
+            self.logger.info(f"🕒 等待 {active_count} 个搜索任务结束...")
+            await asyncio.sleep(1)
+
+        # 第三步：清理基础设施
+        self.logger.info("🛑 开始释放系统资源...")
+        # await self._stop_file_watcher()
+        # await self.task_manager.cleanup()
+        self._running = False
+        self.logger.info("✅ 系统完全关闭")
 
     async def _handle_new_token(self, message: str):
         """新代币事件处理入口"""

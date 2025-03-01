@@ -1,26 +1,39 @@
-import asyncio
-
-from fastapi import APIRouter, HTTPException
-from typing import Optional, Union
+# src/api/v1/shutdown.py
+from fastapi import APIRouter, Query, HTTPException, Request, status
+from typing import Optional
 import logging
+from config import settings
 
-router = APIRouter()
-logger = logging.getLogger(__name__)
-shutdown_event: Union[asyncio.Event, None] = None  # 显式类型声明
+router = APIRouter(tags=["System Control"])
+logger = logging.getLogger("API_")
 
 
-@router.post("/safe_shutdown")
-async def shutdown(api_key: Optional[str] = None):
-    """
-    安全关闭系统（需要提供正确的api_key）
-    """
-    # 验证API Key（示例使用"safe_exit"，正式环境应配置在settings）
-    if api_key != "asd001122":
-        raise HTTPException(status_code=403, detail="Invalid API key")
+@router.get("/safe-shutdown")
+async def trigger_safe_shutdown(
+    request: Request,  # 新增 Request 对象
+    api_key: Optional[str] = Query(None, alias="key")
+):
+    # 验证 API 密钥
+    if api_key != settings.API['key']:
+        logger.warning(f"非法关闭尝试，使用的密钥: {api_key}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid API key"
+        )
 
-    if shutdown_event and not shutdown_event.is_set():
-        shutdown_event.set()
-        logger.warning("🛑 接收到API关闭请求，准备安全关闭系统...")
-        return {"status": "shutdown_initiated"}
+    # 从应用状态获取 monitor 实例
+    monitor = request.app.state.monitor
 
-    return {"status": "already_shutting_down"}
+    try:
+        # 直接调用 core 的 stop 方法
+        await monitor.stop()
+        return {
+            "status": "shutdown_success",
+            "message": "✅ 系统已安全关闭"
+        }
+    except Exception as e:
+        logger.error(f"关闭失败: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
