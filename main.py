@@ -10,10 +10,6 @@ from src.monitor import MonitorCore
 @asynccontextmanager
 async def app_lifespan():
     """正确的异步生命周期管理器"""
-    logging_config.setup_logging()
-    logger = logging.getLogger(__name__)
-
-    logger.info("✅ 日志系统初始化完成")
     monitor = MonitorCore(
         blockchain_ws=settings.BLOCKCHAIN["websocket_url"],
         rule_path=settings.PROJECT_ROOT / "config/rules.yaml"
@@ -21,15 +17,19 @@ async def app_lifespan():
 
     try:
         await monitor.start()
-        logger.info("✅ 监控系统启动成功")
+        logging.info("✅ 监控系统启动成功")
         yield monitor  # 交出控制权
     finally:
-        logger.info("🛑 开始释放资源...")
+        logging.info("🛑 开始释放资源...")
         await monitor.stop()
-        logger.info("✅ 资源释放完成")
+        logging.info("✅ 资源释放完成")
 
 
 async def main():
+    logging_config.setup_logging()
+    logging.getLogger('main')
+    logging.info("✅ 日志系统启动初始化成功")
+
     shutdown_event = asyncio.Event()
     # 注册系统信号
     loop = asyncio.get_running_loop()

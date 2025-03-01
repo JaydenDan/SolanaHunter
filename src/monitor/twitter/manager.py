@@ -35,7 +35,7 @@ class SearchTaskManager:
                     self._is_creating_task = True
                     # 把第一个来创建task的token放到等待数组中
                     self._pending_cas.append(token)
-                    task_name = await self._task_counter.get_name('SEARCH_TASK_No.')
+                    task_name = await self._task_counter.get_name('S_T_No.')
                     asyncio.create_task(
                         self._create_new_task_with_retry(),
                         name=task_name
@@ -111,7 +111,7 @@ class SearchTaskManager:
                 logging.info(f'_pending_cas中任然有被阻塞的新CA：【{len(self._pending_cas)}】-【{self._pending_cas[:30]}】，开始处理')
                 async with self._pending_lock:
                     self._is_creating_task = True  # 新增此行
-                task_name = await self._task_counter.get_name('SEARCH_TASK_No.')
+                task_name = await self._task_counter.get_name('S_T_No.')
                 asyncio.create_task(
                     self._create_new_task_with_retry(),
                     name=task_name

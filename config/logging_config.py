@@ -11,8 +11,8 @@ def setup_logging(level=logging.INFO):
         (
             "%(log_color)s%(asctime)s "
             "[%(levelname).4s] "
-            "[%(module)10.10s] "  # 模块名硬截断到10字符
-            "[%(task_name)10.10s]: "  # 任务名称（通过Filter注入）
+            "[%(module)5.5s] "  # 模块名硬截断到10字符
+            "[%(task_name)15.15s]: "  # 任务名称（通过Filter注入）
             "%(message)s"
         ),
         datefmt="%Y-%m-%d %H:%M:%S",
