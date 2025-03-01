@@ -3,6 +3,11 @@ import asyncio
 import logging
 from config import settings, logging_config
 from src.monitor import MonitorCore
+from src.api.v1.shutdown import router as shutdown_router, shutdown_event
+
+
+# 新增全局变量
+api_shutdown_event = asyncio.Event()  # 实际的事件对象
 
 
 async def main():
@@ -19,7 +24,8 @@ async def main():
         rule_path=settings.PROJECT_ROOT / "config/rules.yaml"
     )
     logger.info("✅ 创建监控核心实例完成...")
-
+    # 关键注入点：将事件对象传递给API模块
+    shutdown_router.shutdown_event = api_shutdown_event
     try:
         # 启动监控系统（异步任务自动运行）
         logger.info("🟢 开始启动监控系统...")
@@ -38,6 +44,7 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
     # TODO 账号在登录、搜索使用过程中，如果出现异常，不能直接结束任务，要换号继续操作。
-    # TODO 钉钉需要单例Client
-    # 接入其他推送平台
+    # TODO 钉钉需要单例Client ✅
+    # TODO 暴露一个关闭API
+    # TODO 接入其他推送平台
 

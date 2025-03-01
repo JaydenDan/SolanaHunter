@@ -81,3 +81,9 @@ wcwidth==0.2.13
 webencodings==0.5.1
 yarg==0.1.9
 yarl==1.18.3
+fastapi~=0.115.10
+socksio~=1.0.0
+twikit~=2.3.3
+watchdog~=6.0.0
+websockets~=15.0
+colorlog~=6.9.0

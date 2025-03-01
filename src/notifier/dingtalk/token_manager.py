@@ -8,23 +8,17 @@ from alibabacloud_dingtalk.oauth2_1_0 import models as oauth2_models
 
 class DingTalkTokenManager:
     """钉钉令牌管理器（协程安全单例）"""
-
-    _instances = {}  # 按 app_key+secret 存储的单例字典
+    _instance = None
     _lock = asyncio.Lock()  # 类级异步锁
     _refresh_lock = asyncio.Lock()  # 令牌刷新锁
 
     def __new__(cls, app_key: str, app_secret: str):
         # 生成实例唯一标识
-        instance_key = f"{app_key}|{app_secret}"
-
-        # 双重检查锁实现
-        if instance_key not in cls._instances:
-            with cls._lock:  # 同步代码块保证线程安全
-                if instance_key not in cls._instances:
-                    instance = super().__new__(cls)
-                    instance._initialized = False  # 延迟初始化标志
-                    cls._instances[instance_key] = instance
-        return cls._instances[instance_key]
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            # 初始化操作放在 __new__ 中，避免 __init__ 重复调用
+            cls._instance._initialized = False
+        return cls._instance
 
     def __init__(self, app_key: str, app_secret: str):
         """初始化方法（协程安全）"""
@@ -37,14 +31,14 @@ class DingTalkTokenManager:
         self._expire_time = 0
         self._initialized = True
 
-    def get_token(self) -> str:
+    async def get_token(self) -> str:
         """获取有效访问令牌（线程安全）"""
         current_time = time.time()
         if current_time < self._expire_time - 60:  # 提前1分钟刷新
             return self._access_token
 
         # 加锁确保只有一个线程执行 token 刷新
-        with self._refresh_lock:
+        async with self._refresh_lock:
             # 再次检查，避免其他线程已经刷新
             if current_time < self._expire_time - 60:
                 return self._access_token

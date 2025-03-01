@@ -19,8 +19,6 @@ async def _get_ca(tweet_text):
     # 查找所有匹配项
     matches = re.findall(pattern, tweet_text)
     # 返回结果
-    # TODO 有时候搜到的帖子没有对应的CA，这里就会报错。改进方向：全部返回，在获取处应当循环对比所有的ca和帖子
-    #  （但是这里没有的CA应该是一次CA-1去匹配了CA-2的帖子，现在还会引发不期望的问题）
     return matches
 
 
@@ -45,7 +43,7 @@ async def _trigger_actions(context: dict):
     )
     logging.info(f"📢 钉钉客户端创建成功。")
     # 发送Markdown消息
-    client.send_message(
+    await client.send_message(
         msg_type="sampleMarkdown",
         content={
             "title": f"""🔔 新代币监控警报""",

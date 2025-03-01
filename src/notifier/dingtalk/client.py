@@ -50,13 +50,13 @@ class DingTalkClient:
         self.config.protocol = "https"
         self.config.region_id = "central"
 
-    def _get_headers(self) -> robot_models.OrgGroupSendHeaders:
+    async def _get_headers(self) -> robot_models.OrgGroupSendHeaders:
         """生成请求头"""
         org_group_send_headers = robot_models.OrgGroupSendHeaders()
-        org_group_send_headers.x_acs_dingtalk_access_token = self.token_manager.get_token()
+        org_group_send_headers.x_acs_dingtalk_access_token = await self.token_manager.get_token()
         return org_group_send_headers
 
-    def send_message(
+    async def send_message(
             self,
             content: str,
             msg_type: str = "text",
@@ -82,7 +82,7 @@ class DingTalkClient:
         try:
             client.org_group_send_with_options(
                 req,
-                headers=self._get_headers(),
+                headers= await self._get_headers(),
                 runtime=util_models.RuntimeOptions()
             )
             return True
