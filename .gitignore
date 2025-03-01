@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info
+*.egg
+dist/
+build/
+.coverage
+htmlcov/
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+
+# Virtual Environments
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+*.venv
+conda/
+miniconda/
+anaconda/
+
+# PyCharm IDE
+.idea/
+.idea_modules/
+*.iml
+*.ipr
+*.iws
+
+# VS Code (optional, 如果同时使用)
+.vscode/
+
+# Environment Files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.secrets
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+*.sqlite3
+
+# Local Development
+*.swp
+*.swo
+*~
+*.tmp
+*.temp
+
+# System Files
+.DS_Store
+Thumbs.db
