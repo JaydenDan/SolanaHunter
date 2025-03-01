@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import signal
+import sys
 from contextlib import asynccontextmanager
 from config import settings, logging_config
 from src.monitor import MonitorCore
@@ -30,11 +31,17 @@ async def app_lifespan():
 
 async def main():
     shutdown_event = asyncio.Event()
-
     # 注册系统信号
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, shutdown_event.set)
+    # 仅非Windows系统注册信号处理
+    if sys.platform != 'win32':
+        logging.info("💻 当前系统环境为MacOS/Linux")
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, shutdown_event.set)
+    else:
+        logging.info("🖥︎ 当前系统环境为Windows")
+        # Windows下用signal.signal处理SIGINT
+        signal.signal(signal.SIGINT, lambda s, f: shutdown_event.set())
 
     async with app_lifespan() as monitor:
         logging.info("🚀 服务进入运行状态")
