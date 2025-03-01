@@ -1,7 +1,10 @@
-socksio~=1.0.0
-twikit~=2.3.3
-pandas~=2.2.3
-PyYAML~=6.0.2
-watchdog~=6.0.0
-websockets~=15.0
-colorlog~=6.9.0
+alibabacloud_dingtalk==2.1.86
+alibabacloud_tea_openapi==0.3.12
+alibabacloud_tea_util==0.3.13
+colorlog==6.9.0
+pandas==2.2.3
+PyYAML==6.0.2
+socksio==1.0.0
+twikit==2.3.3
+watchdog==6.0.0
+websockets==15.0
