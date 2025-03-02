@@ -30,7 +30,3 @@ class TwitterConditionV1:
             return True
         logging.info(f"🚫 匹配失败，当前CA的名称 {self.token_name} 发帖人 {self.screen_name} 不是项目方")
         return False
-
-
-    #
-

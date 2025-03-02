@@ -5,6 +5,7 @@ import sys
 from contextlib import asynccontextmanager
 from config import settings, logging_config
 from src.monitor import MonitorCore
+from src.notifier.discord.bot import DiscordBot
 
 
 @asynccontextmanager
@@ -26,9 +27,18 @@ async def app_lifespan():
 
 
 async def main():
+    # 初始化日志
     logging_config.setup_logging()
     logging.getLogger('main')
     logging.info("✅ 日志系统启动初始化成功")
+
+    # 初始化机器人
+    bot = DiscordBot()
+    try:
+        await bot.init_bot()  # 确保初始化完成
+    except Exception as e:
+        logging.error(f"❌ 机器人初始化失败：{e}")
+        return
 
     shutdown_event = asyncio.Event()
     # 注册系统信号
@@ -39,7 +49,7 @@ async def main():
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, shutdown_event.set)
     else:
-        logging.info("🖥︎ 当前系统环境为Windows")
+        logging.info("🖥 当前系统环境为Windows")
         # Windows下用signal.signal处理SIGINT
         signal.signal(signal.SIGINT, lambda s, f: shutdown_event.set())
 
@@ -50,6 +60,8 @@ async def main():
 
 
 if __name__ == "__main__":
+    # TODO 完成embed消息发送和模板
+    # TODO 搜索任务（疑似）内存泄漏
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

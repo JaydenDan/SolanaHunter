@@ -16,15 +16,18 @@ BLOCKCHAIN = {
     "websocket_url": "wss://pumpportal.fun/api/data"
 }
 
-# 钉钉通知配置（可选）
+# 钉钉通知配置
 DINGTALK = {
     "token": "465646247fa1c550eeda6475e411661e3f5bb44bb24a8663a9b9751e3f67d102",
     "client_id": "dingpeuoicagx1l58xhq",
     "client_secret": "SNEzbvO_yPtzcaFmJG5d_D3VggRSJ7cxeLfS_iPmQPocVtsFEhuE-MXVqtGOeZvr"
 }
 
-API = {
-    "host": "localhost",
-    "port": 8848,
-    "key": "asd001122"
+DISCORD = {
+    "token": "MTM0NTI0NTkyMTk0ODIwNTA3Nw.GC19fL.sWOdoZcQ1h0Z395mBjoI2r7hGDU-yek0Y6IPjk",
+    "proxy": "http://localhost:7890",  # 代理地址
+    "channel": {
+        "all_twitter": 1345252024413065322,
+        "founder_twitter": 1345252024413065323,
+    }
 }

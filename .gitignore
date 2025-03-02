@@ -10,6 +10,7 @@ htmlcov/
 .coverage.*
 .pytest_cache/
 .mypy_cache/
+test/
 
 # Virtual Environments
 venv/

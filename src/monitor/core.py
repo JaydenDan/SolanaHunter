@@ -8,6 +8,7 @@ from .blockchain.new_token_listener import NewTokenListener
 from .twitter.manager import SearchTaskManager as TwitterSearchTaskManager
 from .rules.engine import RuleEngine
 from .rules.conditions.handlers.file_watcher import RuleFileHandler
+from ..notifier.discord.bot import DiscordBot
 from ..utils import TaskCounter
 
 
@@ -19,7 +20,7 @@ class MonitorCore:
         self._task_counter = TaskCounter()
         self.listener = NewTokenListener(blockchain_ws)
         self.rule_engine = RuleEngine(rule_path)
-        self.logger = logging.getLogger(__name__)
+        logging.getLogger(__name__)
         self.task_manager = TwitterSearchTaskManager()
 
         # 新增任务跟踪器
@@ -68,11 +69,11 @@ class MonitorCore:
             return
 
         self._shutdown_initiated.set()
-        self.logger.info("🛑 关闭流程启动，停止接收新任务...")
+        logging.info("🛑 关闭流程启动，停止接收新任务...")
 
         # 第一步：立即停止区块链监听
         self.listener.stop()
-        self.logger.info("✅ 区块链监控已停止")
+        logging.info("✅ 区块链监控已停止")
 
         # 第二步 等待现有任务完成
         while True:
@@ -82,15 +83,18 @@ class MonitorCore:
             if active_count == 0:
                 break
 
-            self.logger.info(f"🕒 等待 {active_count} 个搜索任务结束...")
+            logging.info(f"🕒 等待 {active_count} 个搜索任务结束...")
             await asyncio.sleep(1)
 
         # 第三步：清理基础设施
-        self.logger.info("🛑 开始释放系统资源...")
+        logging.info("🛑 开始释放系统资源...")
+        bot = DiscordBot()
+        await bot.close()
+        logging.info(f"🟢 Discord Bot已关闭")
         # await self._stop_file_watcher()
         # await self.task_manager.cleanup()
         self._running = False
-        self.logger.info("✅ 系统完全关闭")
+        logging.info("✅ 系统完全关闭")
 
     async def _handle_new_token(self, message: str):
         """新代币事件处理入口"""
@@ -99,16 +103,16 @@ class MonitorCore:
             data = json.loads(message)
             # 系统消息处理（优先判断）
             if 'message' in data:
-                self.logger.info(f'✅ 已成功订阅Token创建事件！')
+                logging.info(f'✅ 已成功订阅Token创建事件！')
                 return
             # 数据消息处理
             elif 'signature' in data:
-                self.logger.info(
+                logging.info(
                     f'💰 监听到新的代币：Name=【{data["name"]}】 | Symbol=【{data["symbol"]}】 | CA=【{data["mint"]}】'
                 )
                 # 1. 把新代币CA丢给search_task_manager
                 await self.task_manager.add_new_token(data)
             else:
-                self.logger.warning("⚠️ 未知消息格式: %s", data)
+                logging.warning("⚠️ 未知消息格式: %s", data)
         except Exception as e:
-            self.logger.error(f"❌ 事件处理失败: {str(e)}", exc_info=True)
+            logging.error(f"❌ 事件处理失败: {str(e)}", exc_info=True)

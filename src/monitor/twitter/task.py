@@ -1,9 +1,10 @@
 import asyncio
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
+import discord
 from twikit.client.client import Client
 
 from src.utils.common_util import TaskCounter
@@ -12,6 +13,7 @@ from ..rules.conditions.twitter_cond import TwitterConditionV1
 from ...account.twitter import TwitterClientManager
 from ...account.twitter.get_account import AccountPool
 from ...notifier.dingtalk import DingTalkClient
+from ...notifier.discord.bot import DiscordBot
 
 
 async def _get_ca(tweet_text):
@@ -33,10 +35,87 @@ async def _search_words_maker(ca_list):
     return search_words
 
 
+def _create_embed(context: dict) -> discord.Embed:
+    """生成交易信息Embed（保持你的原始颜色逻辑）"""
+    embed = discord.Embed(
+        title=f"📊 {context['symbol']} 交易动态 | {context['txType'].upper()}",
+        color=discord.Color.green() if context["txType"] == "create" else discord.Color.red(),
+        description=f"[🔍 点击直达OKX](https://www.okx.com/zh-hans/web3/detail/501/{context['mint']})\n"
+                    f"```fix\n{context['mint']}\n```\n",
+        timestamp=datetime.now()  # 自动添加时间戳
+    )
+
+    embed.set_author(
+        name="🔔 发币方新币通知",
+    )
+
+    # 字段构建
+    # embed.add_field(
+    #     name="🔖 代币信息",
+    #     value=f"[{context['name']}]({context['uri']})\n`{context['mint']}`",
+    #     inline=False
+    # )
+    embed.add_field(name="", value="", inline=False)
+    embed.add_field(
+        name="\n💰 资金流动",
+        value=f"初始：`{context['initialBuy']:.2f} SOL`\n当前：`{context['solAmount']:.2f} SOL`",
+        inline=True
+    )
+    embed.add_field(
+        name="\n📈 池子状态",
+        value=f"市值：`{context['marketCapSol']:.2f} SOL`\n流通：{context['vTokensInBondingCurve']}",
+        inline=True
+    )
+
+    # 用户信息
+    social = context["social"]
+
+    # 互动数据
+    metrics = [
+        f"❤️ {social['metrics']['likes']}",
+        f"🔄 {social['metrics']['retweets']}",
+        f"💬 {social['metrics']['replies']}",
+        f"👁️ {social['metrics']['view_count']}"
+    ]
+
+    interactive = " | ".join(metrics)
+
+    embed.add_field(name="", value="", inline=False)
+    embed.add_field(
+        name="\n🐦 关联推文",
+        value=f"[🔍 点击直达推文🔗](https://x.com/{social['user']['screen_name']}/status/{social['id']})\n"
+              f"{social['text'][:60]}...\n",
+        inline=False,
+    )
+
+    embed.add_field(name="", value="", inline=True)
+    embed.add_field(
+        name="",
+        value=f"📊 {interactive}",
+        inline=True
+    )
+
+    is_verified = "✅" if social['user']['verified'] else "❌"
+    is_blue_verified = "✅" if social['user']['is_blue_verified'] else "❌"
+    embed.add_field(
+        name="👤 发布者",
+        value=f"用户名称：[@{social['user']['name']}](https://x.com/{social['user']['screen_name']})\n"
+              f"Description：{social['user']['description']}\n"
+              f"是否认证：{is_verified}    是否蓝色认证：{is_blue_verified}",
+        inline=False
+    )
+
+    # 时间戳
+    embed.add_field(name="", value="", inline=False)
+    embed.set_footer(text=f"帖子发布于 {social['created_at'].strftime('%Y-%m-%d %H:%M:%S UTC+8')}")
+
+    return embed
+
+
 async def _trigger_actions(context: dict):
-    logging.info(f"📢 准备钉钉通知。")
     """触发后续动作"""
     # 发送钉钉通知
+    logging.info(f"📢 准备钉钉通知。")
     # 初始化客户端 (参数从配置读取)
     client = DingTalkClient(
         app_key=settings.DINGTALK['client_id'],
@@ -53,7 +132,7 @@ async def _trigger_actions(context: dict):
 
 - **代币名称**: `{context['name']}`
 - **代币符号**: `{context['symbol']}`
-- **合约地址**: [{context['mint']}](solscan地址链接) 🔗
+- **合约地址**: [{context['mint']}]
 
 ---
 
@@ -107,12 +186,19 @@ async def _process_token(context: dict):
         description = context['social']['user']['description']
         is_blue_verified = context['social']['user']['is_blue_verified']
         cond = TwitterConditionV1(token_name, token_symbol, user_name, screen_name, description, verified, is_blue_verified)
+
+        # Discord
+        bot = DiscordBot()
+        embed = _create_embed(context)
+
         # 判断是否符合规则
         if cond.judge():
             logging.info(f"🔥 检测到符合规则的代币，准备通知: CA【{context['mint']}】, Token_name:【{token_name}】, Token_symbol:【{token_symbol}】")
             await _trigger_actions(context)
+            await bot.send_message(channel_id=settings.DISCORD['channel']['founder_twitter'], embed=embed)
             return True
         else:
+            await bot.send_message(channel_id=settings.DISCORD['channel']['all_twitter'], embed=embed)
             logging.info(f"🈚️ 当前代币不符合规则，跳过通知: CA【{context['mint']}】, Token_name:【{token_name}】, Token_symbol:【{token_symbol}】")
             return False
 
@@ -150,7 +236,7 @@ async def _search_tweets(client: Client, query: str, product: str, retries: int 
                 {
                     "id": tweet.id,
                     "text": tweet.text,
-                    "created_at": tweet.created_at_datetime,
+                    "created_at": tweet.created_at_datetime + timedelta(hours=8),
                     "user": {
                         "name": tweet.user.name,
                         "screen_name": tweet.user.screen_name,
