@@ -66,3 +66,8 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logging.info("👋 用户主动终止操作")
+
+# TODO 黑名单，保存所有已经查阅过的推特发帖人，后续判断是不是二次创业
+# TODO 项目方 + 网址判断 ✅
+# TODO 推文全推 + 粉丝判断 ✅
+# TODO solana监控

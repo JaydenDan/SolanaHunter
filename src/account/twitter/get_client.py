@@ -87,6 +87,7 @@ class TwitterClientManager:
                         auth_info_2=email,
                         password=password
                     )
+                    logging.info(f'✅ Cookie失效账户登录成功')
             else:
                 # 全新登录
                 logging.info('🆕 无本地Cookie，执行全新登录')
@@ -95,11 +96,12 @@ class TwitterClientManager:
                     auth_info_2=email,
                     password=password
                 )
-
+                logging.info(f'✅ 无Cookie账户登录成功')
             # 返回初始化完成的客户端
             return client
         finally:
             # 无论如何都保存最新Cookie
             client.save_cookies(cookie_file)
             logging.info(f'💾 保存Cookie至: {cookie_file}')
+            return client
 

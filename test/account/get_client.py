@@ -4,7 +4,7 @@ from config import logging_config
 import logging
 
 
-async def test():
+async def main():
     # 初始化日志系统（必须最先执行）
     logging_config.setup_logging()
     logger = logging.getLogger(__name__)
@@ -22,11 +22,13 @@ async def test():
         # 注意：根据twikit文档，search_tweet的参数可能需要调整
         tweet = await client.search_tweet(
             "CGsaXSmDcRdb1NpC1wxTuANhJb5A3y6mdPtaNjgopump 谢谢谢谢",
-            "Latest"  # 根据实际API要求可能需要使用枚举值
+            "latest"  # 根据实际API要求可能需要使用枚举值
         )
-        print(f'{tweet[0].text}')
+        print(tweet[0].user)
+        # user = await client.search_user(query="KaitoAI")
+        # print(f'user')
 
 
 # 正确运行异步主函数
 if __name__ == "__main__":
-    asyncio.run(test())
+    asyncio.run(main())

@@ -64,7 +64,7 @@ class AccountPool:
             account.in_use = True
             return account
 
-    async def release(self, account: TwitterAccount, success: bool = True):
+    async def release_account(self, account: TwitterAccount, success: bool = True):
         """释放账户"""
         async with self._lock:
             account.in_use = False

@@ -4,16 +4,13 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import discord
+import httpcore
 from twikit.client.client import Client
 
 from src.utils.common_util import TaskCounter
-from config import settings
-from ..rules.conditions.twitter_cond import TwitterConditionV1
+from ..rules import engine
 from ...account.twitter import TwitterClientManager
 from ...account.twitter.get_account import AccountPool
-from ...notifier.dingtalk import DingTalkClient
-from ...notifier.discord.bot import DiscordBot
 
 
 async def _get_ca(tweet_text):
@@ -33,177 +30,6 @@ async def _search_words_maker(ca_list):
         else:
             search_words = search_words + ' or ' + ca
     return search_words
-
-
-def _create_embed(context: dict) -> discord.Embed:
-    """生成交易信息Embed（保持你的原始颜色逻辑）"""
-    embed = discord.Embed(
-        title=f"📊 {context['symbol']} 交易动态 | {context['txType'].upper()}",
-        color=discord.Color.green() if context["txType"] == "create" else discord.Color.red(),
-        description=f"[🔍 点击直达OKX](https://www.okx.com/zh-hans/web3/detail/501/{context['mint']})\n"
-                    f"```fix\n{context['mint']}\n```\n",
-        timestamp=datetime.now()  # 自动添加时间戳
-    )
-
-    embed.set_author(
-        name="🔔 发币方新币通知",
-    )
-
-    # 字段构建
-    # embed.add_field(
-    #     name="🔖 代币信息",
-    #     value=f"[{context['name']}]({context['uri']})\n`{context['mint']}`",
-    #     inline=False
-    # )
-    embed.add_field(name="", value="", inline=False)
-    embed.add_field(
-        name="\n💰 资金流动",
-        value=f"初始：`{context['initialBuy']:.2f} SOL`\n当前：`{context['solAmount']:.2f} SOL`",
-        inline=True
-    )
-    embed.add_field(
-        name="\n📈 池子状态",
-        value=f"市值：`{context['marketCapSol']:.2f} SOL`\n流通：{context['vTokensInBondingCurve']}",
-        inline=True
-    )
-
-    # 用户信息
-    social = context["social"]
-
-    # 互动数据
-    metrics = [
-        f"❤️ {social['metrics']['likes']}",
-        f"🔄 {social['metrics']['retweets']}",
-        f"💬 {social['metrics']['replies']}",
-        f"👁️ {social['metrics']['view_count']}"
-    ]
-
-    interactive = " | ".join(metrics)
-
-    embed.add_field(name="", value="", inline=False)
-    embed.add_field(
-        name="\n🐦 关联推文",
-        value=f"[🔍 点击直达推文🔗](https://x.com/{social['user']['screen_name']}/status/{social['id']})\n"
-              f"{social['text'][:60]}...\n",
-        inline=False,
-    )
-
-    embed.add_field(name="", value="", inline=True)
-    embed.add_field(
-        name="",
-        value=f"📊 {interactive}",
-        inline=True
-    )
-
-    is_verified = "✅" if social['user']['verified'] else "❌"
-    is_blue_verified = "✅" if social['user']['is_blue_verified'] else "❌"
-    embed.add_field(
-        name="👤 发布者",
-        value=f"用户名称：[@{social['user']['name']}](https://x.com/{social['user']['screen_name']})\n"
-              f"Description：{social['user']['description']}\n"
-              f"是否认证：{is_verified}    是否蓝色认证：{is_blue_verified}",
-        inline=False
-    )
-
-    # 时间戳
-    embed.add_field(name="", value="", inline=False)
-    embed.set_footer(text=f"帖子发布于 {social['created_at'].strftime('%Y-%m-%d %H:%M:%S UTC+8')}")
-
-    return embed
-
-
-async def _trigger_actions(context: dict):
-    """触发后续动作"""
-    # 发送钉钉通知
-    logging.info(f"📢 准备钉钉通知。")
-    # 初始化客户端 (参数从配置读取)
-    client = DingTalkClient(
-        app_key=settings.DINGTALK['client_id'],
-        app_secret=settings.DINGTALK['client_secret'],
-    )
-    logging.info(f"📢 钉钉客户端创建成功。")
-    # 发送Markdown消息
-    await client.send_message(
-        msg_type="sampleMarkdown",
-        content={
-            "title": f"""🔔 新代币监控警报""",
-            "text": f"""
-### <font color="#2E86C1">📝 基础信息</font>
-
-- **代币名称**: `{context['name']}`
-- **代币符号**: `{context['symbol']}`
-- **合约地址**: [{context['mint']}]
-
----
-
-### <font color="#2E86C1">💹 资金动态</font>
-
-- **初始投入**: <font color="green">{context['initialBuy']:.2f} SOL</font> 🌱
-- **当前市值**: <font color="red">{context['marketCapSol']:.2f} SOL</font> 📉
-
----
-
-### <font color="#2E86C1">📢 推特动态</font>
-
-[🔗 原文链接](https://x.com/{context['social']['user']['screen_name']}/status/{context['social']['id']})  
-├─ 📝 **内容**: {context['social']['text']}   
-├─ ❤️ {context['social']['metrics']['likes']} 点赞  
-├─ 🔄 {context['social']['metrics']['retweets']} 转发  
-├─ 👁️ {context['social']['metrics']['view_count']} 浏览  
-└─🕒 {context['social']['created_at']}  
-
-👤 **用户信息**  
-├─ 账号: @{context['social']['user']['screen_name']}  
-└─认证: {'✅ 蓝V' if context['social']['user']['verified'] else '❌ 未认证'}  
-
----
-
-<font color="gray">⏱️ 检测时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</font>
-
-"""
-        })
-    logging.info(f"📢 钉钉已通知。")
-
-
-async def _process_token(context: dict):
-    """代币处理流水线"""
-    try:
-        logging.info(f'🏃 开始处理代币{context}')
-        # TODO 规则引擎评估
-        # if self.rule_engine.evaluate(context):
-        #     logging.info(f"🔥 检测到符合规则的代币: {context['address']}")
-        #     await self._trigger_actions(context)
-
-        # 暂时不走规则，直接钉钉通知
-        # TODO 新逻辑：
-        #  如果data['name']、data['symbol']在推特用户的description中出现说明是发行方，那么就推送；
-        #  添加用户是否蓝色认证：is_blue_verified
-        token_name = context['name']
-        token_symbol = context['symbol']
-        user_name = context['social']['user']['name']
-        screen_name = context['social']['user']['screen_name']
-        verified = context['social']['user']['verified']
-        description = context['social']['user']['description']
-        is_blue_verified = context['social']['user']['is_blue_verified']
-        cond = TwitterConditionV1(token_name, token_symbol, user_name, screen_name, description, verified, is_blue_verified)
-
-        # Discord
-        bot = DiscordBot()
-        embed = _create_embed(context)
-
-        # 判断是否符合规则
-        if cond.judge():
-            logging.info(f"🔥 检测到符合规则的代币，准备通知: CA【{context['mint']}】, Token_name:【{token_name}】, Token_symbol:【{token_symbol}】")
-            await _trigger_actions(context)
-            await bot.send_message(channel_id=settings.DISCORD['channel']['founder_twitter'], embed=embed)
-            return True
-        else:
-            await bot.send_message(channel_id=settings.DISCORD['channel']['all_twitter'], embed=embed)
-            logging.info(f"🈚️ 当前代币不符合规则，跳过通知: CA【{context['mint']}】, Token_name:【{token_name}】, Token_symbol:【{token_symbol}】")
-            return False
-
-    except Exception as e:
-        logging.error(f"处理流水线异常: {context['address']} | {str(e)}")
 
 
 async def _search_tweets(client: Client, query: str, product: str, retries: int = 3) -> list:
@@ -242,7 +68,14 @@ async def _search_tweets(client: Client, query: str, product: str, retries: int 
                         "screen_name": tweet.user.screen_name,
                         "description": tweet.user.description,
                         "verified": tweet.user.verified,
-                        "is_blue_verified": tweet.user.is_blue_verified
+                        "is_blue_verified": tweet.user.is_blue_verified,
+                        "display_url": tweet.user.urls[0]['display_url'],
+                        "expanded_url": tweet.user.urls[0]['expanded_url'],
+                        "following_count": tweet.user.following_count,  # 关注人数
+                        "favourites_count": tweet.user.favourites_count,  # 点赞/收藏数
+                        "followers_count": tweet.user.followers_count,  # 粉丝总数
+                        "fast_followers_count": tweet.user.fast_followers_count,  # 可能用于统计那些“活跃度更高、关注并快速与该账户产生互动”的粉丝数量
+                        "normal_followers_count": tweet.user.normal_followers_count  # 普通的、未被归类为“快速互动”特征的粉丝数量
                     },
                     "metrics": {
                         "likes": tweet.favorite_count,
@@ -253,14 +86,20 @@ async def _search_tweets(client: Client, query: str, product: str, retries: int 
                 }
                 for tweet in search_result
             ]
-
+        except httpcore.ConnectError as e:
+            if attempt == retries:
+                logging.warning(f'❌ 推特搜索失败，已达到最大重试次数')
+                return []
+            retry_delay = min(2 ** attempt, 60)  # 指数退避上限60秒
+            logging.warning(f'🚧 网络连接异常 ({e.__class__.__name__}) | 第{attempt}次重试 ({retry_delay}s后)')
+            await asyncio.sleep(retry_delay)
         except Exception as e:
             if 'Rate limit exceeded' in str(e):
-                logging.error(f'f"❌ 搜索失败，当前账号已达到速率限制！')
-                return []
+                logging.error(f'❌ 搜索失败，当前账号已达到速率限制！')
+                raise RuntimeError(str(e)) from e
             if attempt == retries:
-                raise RuntimeError(f"❌ 搜索失败: {query} ({str(e)})") from e
-
+                logging.warning(f'❌ 推特搜索失败，已达到最大重试次数，本次搜索放弃。')
+                return []
             retry_delay = min(2 ** attempt, 60)  # 指数退避上限60秒
             logging.warning(f"⚠️ 搜索请求失败: {query} | 第{attempt}次重试 ({retry_delay}s后)")
             await asyncio.sleep(retry_delay)
@@ -354,11 +193,11 @@ class SearchTask:
                     if not self.ca_list and not self.token_list:
                         logging.info(
                             f'🏁 当前搜索任务已清空，销毁当前任务。ca_list：{len(self.ca_list)}-【{self.ca_list}】，token_list{len(self.token_list)}-【{self.token_list}】')
-                        await self.account_pool.release(self.account, True)
+                        await self.account_pool.release_account(self.account, True)
                         break  # 退出循环，触发 finally 回调
         except Exception as e:
             logging.error(f'❌ 搜索任务协程在运行时发生错误【{e}】', exc_info=True)
-            await self.account_pool.release(self.account, False)
+            await self.account_pool.release_account(self.account, False)
         finally:
             # 通知管理器移除本任务
             logging.info(f'📝 关闭一个搜索协程并将账号释放...')
@@ -374,74 +213,11 @@ class SearchTask:
             search_words = await _search_words_maker(current_ca_list)
             # 搜索帖子
             tweets = await _search_tweets(self.client, str(search_words), "Latest")
-            # 搜到帖子后就处理帖子
+
             if len(tweets) > 0:
                 cas_set = set(current_ca_list)
-                for t in tweets:
-                    # 获取文本中的CA内容，一般只有一个
-                    tcas = await _get_ca(t['text'])
-                    for tca in tcas:
-                        logging.info(f'🔍️ 当前搜索到的推特帖子内容为【{t["text"]}】')
-                        if tca in cas_set:
-                            # 对于搜索到的CA帖子，返回格式化数据。
-                            # 安全获取匹配项
-                            matched_item = next(
-                                (item for item in self.token_list
-                                 if item.get("mint") == tca),
-                                None  # 找不到时返回 None
-                            )
-
-                            if matched_item is None:
-                                logging.warning(
-                                    f'⚠️ 未找到匹配的 token，CA: {tca}，可能是一个CA有多个推文，在前一个推文触发时已将该CA移出列表。')
-                                continue  # 跳过或执行其他逻辑
-                            data = matched_item['token']
-                            logging.info(f'CA反搜索到的数据【{data}】')
-                            if data:
-                                context = {
-                                    # 交易签名（唯一标识）
-                                    "signature": data["signature"],
-                                    # 代币合约地址
-                                    "mint": data["mint"],
-                                    # 交易者公钥
-                                    "traderPublicKey": data["traderPublicKey"],
-                                    # 交易类型（create/swap等）
-                                    "txType": data["txType"],
-                                    # 初始购买金额（SOL）
-                                    "initialBuy": data["initialBuy"],
-                                    # 当前交易SOL金额
-                                    "solAmount": data["solAmount"],
-                                    # 绑定曲线公钥
-                                    "bondingCurveKey": data["bondingCurveKey"],
-                                    # 绑定曲线中的代币总量
-                                    "vTokensInBondingCurve": data["vTokensInBondingCurve"],
-                                    # 绑定曲线中的SOL总量
-                                    "vSolInBondingCurve": data["vSolInBondingCurve"],
-                                    # 市值（SOL计价）
-                                    "marketCapSol": data["marketCapSol"],
-                                    # 代币名称
-                                    "name": data["name"],
-                                    # 代币符号
-                                    "symbol": data["symbol"],
-                                    # 代币元数据URI
-                                    "uri": data["uri"],
-                                    # 所属交易池
-                                    "pool": data["pool"],
-                                    # 社交媒体数据（异步获取）
-                                    "social": t
-                                }
-                                logging.info(f"📺 CA[{tca}]，捕获推文: {t['text']}")
-                                # 处理搜索到帖子的CA
-                                notified = await _process_token(context)
-                                # 如果满足规则通知了，就删除该CA，否则继续搜索下一条推文
-                                if notified:
-                                    # 删除已处理的CA
-                                    if tca in remaining_ca:
-                                        remaining_ca.remove(tca)
-                                        # 删除已处理的token信息
-                                        self.token_list = [item for item in self.token_list if item.get("mint") != tca]
-                        else:
-                            logging.warning(f"⚠️ 当前推特中的CA【{tca}】不在CA监控名单中，请检查程序逻辑！")
+                # # 把数据交给通知规则处理器，把剩余的ca保存到self
+                remaining_ca, self.token_list = await engine.notify_process(tweets=tweets, cas_set=cas_set, token_list=self.token_list, remaining_ca=remaining_ca)
             else:
                 logging.info(f'🈚️ 当前搜索任务中所有CA都没有相关推文，CA列表：【{current_ca_list}】')
             return remaining_ca

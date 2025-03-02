@@ -6,8 +6,6 @@ from pathlib import Path
 from watchdog.observers import Observer
 from .blockchain.new_token_listener import NewTokenListener
 from .twitter.manager import SearchTaskManager as TwitterSearchTaskManager
-from .rules.engine import RuleEngine
-from .rules.conditions.handlers.file_watcher import RuleFileHandler
 from ..notifier.discord.bot import DiscordBot
 from ..utils import TaskCounter
 
@@ -19,7 +17,6 @@ class MonitorCore:
         # 初始化组件
         self._task_counter = TaskCounter()
         self.listener = NewTokenListener(blockchain_ws)
-        self.rule_engine = RuleEngine(rule_path)
         logging.getLogger(__name__)
         self.task_manager = TwitterSearchTaskManager()
 
@@ -28,14 +25,6 @@ class MonitorCore:
         self._shutdown_initiated = asyncio.Event()
 
         # 文件监控配置
-        self.observer = Observer()
-        self.observer.schedule(
-            RuleFileHandler(
-                config_path=rule_path.parent,
-                reload_callback=self.rule_engine.reload_rules
-            ),
-            path=str(rule_path.parent)
-        )
 
         # 状态管理
         self._running = False
@@ -48,10 +37,6 @@ class MonitorCore:
     async def start(self):
         """启动实时监控系统"""
         self._running = True
-
-        # 启动文件监控（同步转异步）
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self.observer.start)
 
         # 配置区块链监听回调
         self.listener.set_callback(self._handle_new_token)
