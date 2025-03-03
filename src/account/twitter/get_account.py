@@ -18,7 +18,6 @@ class TwitterAccount:
 
 class AccountPool:
     _instance = None  # 单例实例
-    _lock = asyncio.Lock()  # 异步锁，用于协程安全
 
     def __new__(cls, excel_path: str):
         # 单例模式核心逻辑：确保只有一个实例
@@ -41,7 +40,7 @@ class AccountPool:
     def _init_accounts(self):
         """从Excel加载账户数据"""
         df = pd.read_excel(self.excel_path)
-        for _, row in df.iterrows():
+        for _, row in df.iloc[::-1].iterrows():
             account = TwitterAccount(
                 email=row['email'],
                 username=row['username'],
