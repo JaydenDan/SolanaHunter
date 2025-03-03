@@ -77,12 +77,12 @@ async def _search_tweets(client: Client, query: str, product: str) -> list:
             for tweet in search_result
         ]
     except httpcore.ConnectError as e:
-        logging.warning(f'🌐 网络连接失败 | {query} ({e.__class__.__name__})')
+        logging.warning(f'🌐 ({e.__class__.__name__}) 网络连接失败 | {query}')
         return []
     except Exception as e:
         if 'Rate limit exceeded' in str(e):
-            logging.error(f'🚫 429-账号达到限流 | {query} ({e.__class__.__name__})')
-        logging.warning(f"⚠️ 搜索失败 | {query} ({e.__class__.__name__})")
+            logging.error(f'🚫 ({e.__class__.__name__}) 429-账号达到限流 | {query} ')
+        logging.warning(f"⚠️ ({e.__class__.__name__}) 搜索失败 | {query}",exc_info=True)
         return []
 
 
