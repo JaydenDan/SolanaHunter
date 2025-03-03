@@ -20,19 +20,12 @@ class MonitorCore:
         logging.getLogger(__name__)
         self.task_manager = TwitterSearchTaskManager()
 
-        # 新增任务跟踪器
-        self._active_tasks = set()
         self._shutdown_initiated = asyncio.Event()
 
         # 文件监控配置
 
         # 状态管理
         self._running = False
-
-    def _track_task(self, task: asyncio.Task):
-        """自动跟踪任务生命周期"""
-        self._active_tasks.add(task)
-        task.add_done_callback(lambda t: self._active_tasks.discard(t))
 
     async def start(self):
         """启动实时监控系统"""

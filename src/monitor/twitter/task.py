@@ -13,15 +13,6 @@ from ...account.twitter import TwitterClientManager
 from ...account.twitter.get_account import AccountPool
 
 
-async def _get_ca(tweet_text):
-    # 正则表达式：匹配仅包含字母和数字的地址，假设长度在30到50之间
-    pattern = r"\b[A-Za-z0-9]{30,50}\b"
-    # 查找所有匹配项
-    matches = re.findall(pattern, tweet_text)
-    # 返回结果
-    return matches
-
-
 async def _search_words_maker(ca_list):
     search_words = ''
     for ca in ca_list:
@@ -32,79 +23,67 @@ async def _search_words_maker(ca_list):
     return search_words
 
 
-async def _search_tweets(client: Client, query: str, product: str, retries: int = 3) -> list:
+async def _search_tweets(client: Client, query: str, product: str) -> list:
     """
-    异步搜索推文（带重试机制）
+    异步搜索推文
     :param client: 推特客户端
     :param query: 搜索关键词
     :param product: 搜索模式
-    :param retries: 重试次数
     :return: 推文列表
     """
-    for attempt in range(1, retries + 1):
-        try:
-            # 定义允许的 product 值列表
-            ALLOWED_PRODUCTS = {'Top', 'Latest', 'Media'}
+    try:
+        # 定义允许的 product 值列表
+        ALLOWED_PRODUCTS = {'Top', 'Latest', 'Media'}
 
-            # 调用前处理参数
-            if product in ALLOWED_PRODUCTS:
-                validated_product = product
-            else:
-                validated_product = "Latest"
-                logging.warning(f"⚠️️ 当前Twitter搜索类型不合法，已默认为[Latest]")
-            # 执行搜索
-            search_result = await client.search_tweet(
-                query, validated_product,  # type: ignore
-            )
+        # 调用前处理参数
+        if product in ALLOWED_PRODUCTS:
+            validated_product = product
+        else:
+            validated_product = "Latest"
+            logging.warning(f"⚠️️ 当前Twitter搜索类型不合法，已默认为[Latest]")
+            
+        # 执行搜索
+        search_result = await client.search_tweet(
+            query, validated_product,  # type: ignore
+        )
 
-            # 格式化结果
-            return [
-                {
-                    "id": tweet.id,
-                    "text": tweet.text,
-                    "created_at": tweet.created_at_datetime + timedelta(hours=8),
-                    "user": {
-                        "name": tweet.user.name,
-                        "screen_name": tweet.user.screen_name,
-                        "description": tweet.user.description,
-                        "verified": tweet.user.verified,
-                        "is_blue_verified": tweet.user.is_blue_verified,
-                        "display_url": tweet.user.urls[0]['display_url'],
-                        "expanded_url": tweet.user.urls[0]['expanded_url'],
-                        "following_count": tweet.user.following_count,  # 关注人数
-                        "favourites_count": tweet.user.favourites_count,  # 点赞/收藏数
-                        "followers_count": tweet.user.followers_count,  # 粉丝总数
-                        "fast_followers_count": tweet.user.fast_followers_count,  # 可能用于统计那些“活跃度更高、关注并快速与该账户产生互动”的粉丝数量
-                        "normal_followers_count": tweet.user.normal_followers_count  # 普通的、未被归类为“快速互动”特征的粉丝数量
-                    },
-                    "metrics": {
-                        "likes": tweet.favorite_count,
-                        "retweets": tweet.retweet_count,
-                        "replies": tweet.reply_count,
-                        "view_count": tweet.view_count if tweet.view_count is not None else 0  # 默认为0
-                    }
+        # 格式化结果
+        return [
+            {
+                "id": tweet.id,
+                "text": tweet.text,
+                "created_at": tweet.created_at_datetime + timedelta(hours=8),
+                "user": {
+                    "name": tweet.user.name,
+                    "screen_name": tweet.user.screen_name,
+                    "description": tweet.user.description,
+                    "verified": tweet.user.verified,
+                    "is_blue_verified": tweet.user.is_blue_verified,
+                    "display_url": tweet.user.urls[0]['display_url'],
+                    "expanded_url": tweet.user.urls[0]['expanded_url'],
+                    "following_count": tweet.user.following_count,  # 关注人数
+                    "favourites_count": tweet.user.favourites_count,  # 点赞/收藏数
+                    "followers_count": tweet.user.followers_count,  # 粉丝总数
+                    "fast_followers_count": tweet.user.fast_followers_count,  # 可能用于统计那些"活跃度更高、关注并快速与该账户产生互动"的粉丝数量
+                    "normal_followers_count": tweet.user.normal_followers_count  # 普通的、未被归类为"快速互动"特征的粉丝数量
+                },
+                "metrics": {
+                    "likes": tweet.favorite_count,
+                    "retweets": tweet.retweet_count,
+                    "replies": tweet.reply_count,
+                    "view_count": tweet.view_count if tweet.view_count is not None else 0  # 默认为0
                 }
-                for tweet in search_result
-            ]
-        except httpcore.ConnectError as e:
-            if attempt == retries:
-                logging.warning(f'❌ 推特搜索失败，已达到最大重试次数')
-                return []
-            retry_delay = min(2 ** attempt, 60)  # 指数退避上限60秒
-            logging.warning(f'🚧 网络连接异常 ({e.__class__.__name__}) | 第{attempt}次重试 ({retry_delay}s后)')
-            await asyncio.sleep(retry_delay)
-        except Exception as e:
-            if 'Rate limit exceeded' in str(e):
-                logging.error(f'❌ 搜索失败，当前账号已达到速率限制！')
-                raise RuntimeError(str(e)) from e
-            if attempt == retries:
-                logging.warning(f'❌ 推特搜索失败，已达到最大重试次数，本次搜索放弃。')
-                return []
-            retry_delay = min(10 ** attempt, 60)  # 指数退避上限60秒
-            logging.warning(f"⚠️ 搜索请求失败: {query} | 第{attempt}次重试 ({retry_delay}s后\n{e})")
-            await asyncio.sleep(retry_delay)
-
-    return []  # 确保所有路径都有返回值
+            }
+            for tweet in search_result
+        ]
+    except httpcore.ConnectError as e:
+        logging.warning(f'🌐 网络连接失败 | {query} ({e.__class__.__name__})')
+        return []
+    except Exception as e:
+        if 'Rate limit exceeded' in str(e):
+            logging.error(f'🚫 429-账号达到限流 | {query} ({e.__class__.__name__})')
+        logging.warning(f"⚠️ 搜索失败 | {query} ({e.__class__.__name__})")
+        return []
 
 
 class SearchTask:

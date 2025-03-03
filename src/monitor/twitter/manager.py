@@ -47,10 +47,12 @@ class SearchTaskManager:
                     self._pending_cas.append(token)
 
     async def remove_task(self, task_to_remove):
-        async with self.manager_lock:
-            # 安全移除任务
-            logging.info(f'📴 已关闭一个搜索协程【{task_to_remove}】')
-            self.search_tasks = [task for task in self.search_tasks if task != task_to_remove]
+        # 直接使用线程安全操作（无需锁）
+        try:
+            self.search_tasks.remove(task_to_remove)
+            logging.info(f'📴 已关闭搜索协程【{task_to_remove}】')
+        except ValueError:
+            logging.warning(f'⚠️ 尝试移除不存在的任务: {task_to_remove}')
 
     async def _create_new_task_with_retry(self):
         """新版带批量处理能力的任务创建"""
