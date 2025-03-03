@@ -59,8 +59,8 @@ async def _search_tweets(client: Client, query: str, product: str) -> list:
                     "description": tweet.user.description,
                     "verified": tweet.user.verified,
                     "is_blue_verified": tweet.user.is_blue_verified,
-                    "display_url": tweet.user.urls[0]['display_url'],
-                    "expanded_url": tweet.user.urls[0]['expanded_url'],
+                    "display_url": tweet.user.urls[0]['display_url'] if tweet.user.urls and tweet.user.urls[0].get('display_url') else '----',
+                    "expanded_url": tweet.user.urls[0]['expanded_url'] if tweet.user.urls and tweet.user.urls[0].get('expanded_url') else '----',
                     "following_count": tweet.user.following_count,  # 关注人数
                     "favourites_count": tweet.user.favourites_count,  # 点赞/收藏数
                     "followers_count": tweet.user.followers_count,  # 粉丝总数
