@@ -100,8 +100,8 @@ async def _search_tweets(client: Client, query: str, product: str, retries: int 
             if attempt == retries:
                 logging.warning(f'❌ 推特搜索失败，已达到最大重试次数，本次搜索放弃。')
                 return []
-            retry_delay = min(2 ** attempt, 60)  # 指数退避上限60秒
-            logging.warning(f"⚠️ 搜索请求失败: {query} | 第{attempt}次重试 ({retry_delay}s后)")
+            retry_delay = min(10 ** attempt, 60)  # 指数退避上限60秒
+            logging.warning(f"⚠️ 搜索请求失败: {query} | 第{attempt}次重试 ({retry_delay}s后\n{e})")
             await asyncio.sleep(retry_delay)
 
     return []  # 确保所有路径都有返回值
