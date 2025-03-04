@@ -54,7 +54,7 @@ async def main():
         signal.signal(signal.SIGINT, lambda s, f: shutdown_event.set())
 
     async with app_lifespan() as monitor:
-        logging.info("🚀 服务进入运行状态")
+        logging.info("🚀 所有组件启动 启动 启动～")
         await shutdown_event.wait()  # 保持运行直到收到终止信号
         logging.info("🛬 开始关闭流程...")
 
@@ -67,7 +67,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logging.info("👋 用户主动终止操作")
 
-# TODO 黑名单，保存所有已经查阅过的推特发帖人，后续判断是不是二次创业
+# TODO 黑名单，保存所有已经查阅过的推特发帖人，后续判断是不是二次创业 🗑️
 # TODO 项目方 + 网址判断 ✅
 # TODO 推文全推 + 粉丝判断 ✅
 # TODO solana监控

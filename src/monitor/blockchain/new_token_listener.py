@@ -24,10 +24,8 @@ class NewTokenListener:
         self.logger = logging.getLogger(__name__)
 
     def set_callback(self, callback):
-        self.logger.debug('NewTokenListener开始设置回调用函数')
         """设置异步回调函数"""
         self._callback = callback
-        self.logger.debug('NewTokenListener设置回调用函数完毕')
 
     async def start_listening(self):
         """启动带智能重连的监听"""
@@ -46,7 +44,7 @@ class NewTokenListener:
                             return
                         if self._callback:
                             # 监听到新代币立即创建异步任务，去处理新代币
-                            task_name = await self._task_counter.get_name('H_N_T')
+                            task_name = await self._task_counter.get_name('Token_No.')
                             asyncio.create_task(
                                 self._callback(message),
                                 name=task_name

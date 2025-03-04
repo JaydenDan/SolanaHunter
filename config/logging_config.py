@@ -6,13 +6,20 @@ from typing import Optional
 
 def setup_logging(level=logging.INFO):
     """配置带颜色分级的日志系统"""
+    
+    # 设置第三方包的日志级别
+    logging.getLogger('twikit').setLevel(logging.WARNING)
+    logging.getLogger('discord').setLevel(logging.WARNING)
+    logging.getLogger('websockets').setLevel(logging.WARNING)
+    logging.getLogger('asyncio').setLevel(logging.WARNING)
+    logging.getLogger('aiohttp').setLevel(logging.WARNING)
 
     formatter = colorlog.ColoredFormatter(
         (
             "%(log_color)s%(asctime)s "
             "[%(levelname).4s] "
-            "[%(module)5.5s] "  # 模块名硬截断到10字符
-            "[%(task_name)15.15s]: "  # 任务名称（通过Filter注入）
+            "[%(module)5.5s] "
+            "[%(task_name)20.20s]: "
             "%(message)s"
         ),
         datefmt="%Y-%m-%d %H:%M:%S",
@@ -30,7 +37,7 @@ def setup_logging(level=logging.INFO):
 
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
-    handler.addFilter(TaskNameFilter())  # 关键：注入 task_name
+    handler.addFilter(TaskNameFilter())
 
     root_logger = logging.getLogger()
     root_logger.addHandler(handler)

@@ -1,16 +1,19 @@
 import asyncio
 import logging
-import re
+
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Optional
 
-import httpcore
-from twikit.client.client import Client
+from httpcore import ConnectError
+from socksio import ProtocolError
+from twikit import AccountSuspended
 
+from src.notifier.discord.bot import DiscordBot
 from src.utils.common_util import TaskCounter
 from ..rules import engine
 from ...account.twitter import TwitterClientManager
-from ...account.twitter.get_account import AccountPool
+from ...account.twitter.get_account import AccountPool, TwitterAccount
 
 
 async def _search_words_maker(ca_list):
@@ -23,96 +26,47 @@ async def _search_words_maker(ca_list):
     return search_words
 
 
-async def _search_tweets(client: Client, query: str, product: str) -> list:
-    """
-    异步搜索推文
-    :param client: 推特客户端
-    :param query: 搜索关键词
-    :param product: 搜索模式
-    :return: 推文列表
-    """
-    try:
-        # 定义允许的 product 值列表
-        ALLOWED_PRODUCTS = {'Top', 'Latest', 'Media'}
-
-        # 调用前处理参数
-        if product in ALLOWED_PRODUCTS:
-            validated_product = product
-        else:
-            validated_product = "Latest"
-            logging.warning(f"⚠️️ 当前Twitter搜索类型不合法，已默认为[Latest]")
-            
-        # 执行搜索
-        search_result = await client.search_tweet(
-            query, validated_product,  # type: ignore
-        )
-
-        # 格式化结果
-        return [
-            {
-                "id": tweet.id,
-                "text": tweet.text,
-                "created_at": tweet.created_at_datetime + timedelta(hours=8),
-                "user": {
-                    "name": tweet.user.name,
-                    "screen_name": tweet.user.screen_name,
-                    "description": tweet.user.description,
-                    "verified": tweet.user.verified,
-                    "is_blue_verified": tweet.user.is_blue_verified,
-                    "display_url": tweet.user.urls[0]['display_url'] if tweet.user.urls and tweet.user.urls[0].get('display_url') else '----',
-                    "expanded_url": tweet.user.urls[0]['expanded_url'] if tweet.user.urls and tweet.user.urls[0].get('expanded_url') else '----',
-                    "following_count": tweet.user.following_count,  # 关注人数
-                    "favourites_count": tweet.user.favourites_count,  # 点赞/收藏数
-                    "followers_count": tweet.user.followers_count,  # 粉丝总数
-                    "fast_followers_count": tweet.user.fast_followers_count,  # 可能用于统计那些"活跃度更高、关注并快速与该账户产生互动"的粉丝数量
-                    "normal_followers_count": tweet.user.normal_followers_count  # 普通的、未被归类为"快速互动"特征的粉丝数量
-                },
-                "metrics": {
-                    "likes": tweet.favorite_count,
-                    "retweets": tweet.retweet_count,
-                    "replies": tweet.reply_count,
-                    "view_count": tweet.view_count if tweet.view_count is not None else 0  # 默认为0
-                }
-            }
-            for tweet in search_result
-        ]
-    except httpcore.ConnectError as e:
-        logging.warning(f'🌐 ({e.__class__.__name__}) 网络连接失败 | {query}')
-        return []
-    except Exception as e:
-        if 'Rate limit exceeded' in str(e):
-            logging.error(f'🚫 ({e.__class__.__name__}) 429-账号达到限流 | {query} ')
-        logging.warning(f"⚠️ ({e.__class__.__name__}) 搜索失败 | {query}",exc_info=True)
-        return []
-
-
 class SearchTask:
-    def __init__(self, twitter_config: dict, on_finish_callback):
+    def __init__(self, twitter_config: dict, on_finish_callback, account: TwitterAccount):
         self._task_counter = TaskCounter()
         self.ca_list = []
         self.token_list = []
         self.lock = asyncio.Lock()
         self.on_finish_callback = on_finish_callback
-        self.task = asyncio.create_task(self.run())
 
         if not Path(twitter_config['account_file_path']).exists():
             raise FileNotFoundError(f"Twitter账号文件路径无效: {twitter_config['account_file_path']}")
         self.account_file_path = twitter_config['account_file_path']
-        self.account_pool = AccountPool(twitter_config['account_file_path'])  # 假设AccountPool的__init__是同步的
+        self.account_pool = AccountPool(twitter_config['account_file_path'])
         self.client_manager = TwitterClientManager()
-        self.account = None  # 异步获取的账号占位
-        self.client = None  # 异步初始化的客户端占位
+        self.account = account
+        self.client = None
 
     async def initialize_client(self):
         logging.info(f'🏹 开始初始化Twikit Client...')
-        self.account = await self.account_pool.acquire()
-        self.client = await self.client_manager.get_client(
-            email=self.account.email,
-            username=self.account.username,
-            password=self.account.password,
-            proxy=self.account.proxy  # 使用类初始化时的proxy参数
-        )
-        logging.info(f'🎯Twikit Client初始化完毕!')
+        if not self.account:
+            logging.error("❌ 无法获取账号")
+            return
+
+        try:
+            self.client = await self.client_manager.get_client(
+                email=self.account.email,
+                username=self.account.username,
+                password=self.account.password,
+                proxy=self.account.proxy
+            )
+            if self.client:
+                logging.info(f'🎯Twikit Client初始化完毕! 加载账号: {self.account.email}')
+            else:
+                # 如果获取客户端失败但没有抛出异常，也需要换号
+                logging.warning(f'⚠️ 初始化客户端失败，重新初始化客户端: {self.account.email}')
+                await self.initialize_client()
+        except AccountSuspended as e:
+            logging.warning(f'⚠️ 账号【{self.account.email}】初始化Twikit Client失败，换号重新初始化')
+            await self.initialize_client()
+        except Exception as e:
+            # 其他异常直接抛出
+            raise Exception(f'❌ 初始化客户端失败，当前search_task将被放弃。') from e
 
     async def add_ca(self, token: dict):
         async with self.lock:
@@ -131,25 +85,21 @@ class SearchTask:
     async def run(self):
         """执行搜索任务"""
         try:
-            logging.info(f'🔛 开始执行一个搜索任务...')
             await self.initialize_client()
+            logging.info(f'🔛 搜索任务已启动，使用账号: {self.account.email}')
             while True:
-                # 20s 执行一次
                 await asyncio.sleep(20)
-                async with self.lock:  # 1. 获取异步锁
-                    # 1. 获取并清空当前 CA 列表
-                    current_ca = self.ca_list.copy()  # 2. 复制当前CA列表
-                    self.ca_list.clear()  # 3. 清空原始列表
+                async with self.lock:
+                    current_ca = self.ca_list.copy()
+                    self.ca_list.clear()
 
-                    # 2. 检查并移除超时 CA（新增逻辑）
                     now = datetime.now()
-                    # 找出超时（>600秒）的 CA
-                    logging.info(f'🆑 正在清理的搜索任务列表中的超时CA')
                     expired_mints = [
                         t["mint"] for t in self.token_list
                         if (now - t["start_time"]).total_seconds() > 600
                     ]
-                    # 同时从 token_list 和当前 CA 列表中移除
+                    if expired_mints:
+                        logging.info(f'🆑 清理{len(expired_mints)}个超时CA')
                     self.token_list = [
                         t for t in self.token_list
                         if t["mint"] not in expired_mints
@@ -159,28 +109,21 @@ class SearchTask:
                         if ca not in expired_mints
                     ]
 
-                # 3. 处理当前 CA（注意：这里已经不在 lock 中，使用副本数据）
                 remaining_ca_list = []
                 if current_ca:
-                    # 在推特搜索当前CA
                     remaining_ca_list = await self._monitor_social_data(current_ca)
 
-                # 4. 合并剩余 CA（需要再次加锁）
                 async with self.lock:
                     self.ca_list.extend(remaining_ca_list)
-                    # 检查是否需要销毁任务（列表完全空时）
                     if not self.ca_list and not self.token_list:
-                        logging.info(
-                            f'🏁 当前搜索任务已清空，销毁当前任务。ca_list：{len(self.ca_list)}-【{self.ca_list}】，token_list{len(self.token_list)}-【{self.token_list}】')
+                        logging.info(f'🏁 搜索任务已完成，释放账号: {self.account.email}')
                         await self.account_pool.release_account(self.account, True)
-                        break  # 退出循环，触发 finally 回调
+                        break
         except Exception as e:
-            logging.error(f'❌ 搜索任务协程在运行时发生错误【{e}】', exc_info=True)
+            logging.error(f'❌ 搜索任务运行错误: {str(e)}', exc_info=True)
             await self.account_pool.release_account(self.account, False)
         finally:
-            # 通知管理器移除本任务
-            logging.info(f'📝 关闭一个搜索协程并将账号释放...')
-            await self.on_finish_callback(self)
+            await self.on_finish_callback(self, self.account.email)
 
     async def _monitor_social_data(self, current_ca_list: list):
         """监控CA的推特帖子，然后对有帖子的CA进行操作"""
@@ -191,15 +134,121 @@ class SearchTask:
             # 生成搜索关键字
             search_words = await _search_words_maker(current_ca_list)
             # 搜索帖子
-            tweets = await _search_tweets(self.client, str(search_words), "Latest")
+            tweets = await self._search_tweets(str(search_words), "Latest")
 
             if len(tweets) > 0:
                 cas_set = set(current_ca_list)
-                # # 把数据交给通知规则处理器，把剩余的ca保存到self
-                remaining_ca, self.token_list = await engine.notify_process(tweets=tweets, cas_set=cas_set, token_list=self.token_list, remaining_ca=remaining_ca)
-            else:
-                logging.info(f'🈚️ 当前搜索任务中所有CA都没有相关推文，CA列表：【{current_ca_list}】')
+                remaining_ca, self.token_list = await engine.notify_process(
+                    tweets=tweets,
+                    cas_set=cas_set,
+                    token_list=self.token_list,
+                    remaining_ca=remaining_ca
+                )
             return remaining_ca
         except Exception as e:
             logging.error(f"❌ 社交媒体数据获取失败: {str(e)}", exc_info=True)
             return remaining_ca
+
+    async def _search_tweets(self, query: str, product: str) -> list:
+        """
+        异步搜索推文
+        :param query: 搜索关键词
+        :param product: 搜索模式
+        :return: 推文列表
+        """
+        try:
+            ALLOWED_PRODUCTS = {'Top', 'Latest', 'Media'}
+            validated_product = product if product in ALLOWED_PRODUCTS else "Latest"
+
+            search_result = await self.client.search_tweet(
+                query, validated_product,
+            )
+
+            return [
+                {
+                    "id": tweet.id,
+                    "text": tweet.text,
+                    "created_at": tweet.created_at_datetime + timedelta(hours=8),
+                    "user": {
+                        "name": tweet.user.name,
+                        "screen_name": tweet.user.screen_name,
+                        "description": tweet.user.description,
+                        "verified": tweet.user.verified,
+                        "is_blue_verified": tweet.user.is_blue_verified,
+                        "display_url": tweet.user.urls[0]['display_url'] if tweet.user.urls and tweet.user.urls[0].get(
+                            'display_url') else '----',
+                        "expanded_url": tweet.user.urls[0]['expanded_url'] if tweet.user.urls and tweet.user.urls[
+                            0].get('expanded_url') else '----',
+                        "following_count": tweet.user.following_count,
+                        "favourites_count": tweet.user.favourites_count,
+                        "followers_count": tweet.user.followers_count,
+                        "fast_followers_count": tweet.user.fast_followers_count,
+                        "normal_followers_count": tweet.user.normal_followers_count
+                    },
+                    "metrics": {
+                        "likes": tweet.favorite_count,
+                        "retweets": tweet.retweet_count,
+                        "replies": tweet.reply_count,
+                        "view_count": tweet.view_count if tweet.view_count is not None else 0
+                    }
+                }
+                for tweet in search_result
+            ]
+        except ConnectError as e:
+            logging.warning(f'🌐 网络连接失败: {str(e)}')
+        except ProtocolError as e:
+            logging.warning(f'🌐 代理连接失败: {str(e)}')
+        except AccountSuspended as e:
+            if 'Rate limit exceeded' in str(e):
+                logging.warning(f'🚫 账号【{self.account.email}】达到限流-429')
+                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+        except Exception as e:
+            if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
+                logging.warning(f'🚫 账号【{self.account.email}】疑似封禁-AttributeError')
+                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                return []
+            if "Forbidden" in str(e) or "403" in str(e):
+                logging.warning(f'🚫 账号【{self.account.email}】账号被禁止访问-403')
+                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                return []
+            logging.error(f"❌ 搜索失败: {str(e)}", exc_info=True)
+            raise Exception(f'❌ 搜索失败，当前search_task将被放弃。') from e
+        return []
+
+    async def _reinitialize_client(self, error_info: str, stack_trace: str):
+        """重新初始化客户端（更换账号）"""
+        try:
+            bot = DiscordBot()
+            await bot.send_account_error(self.account, error_info, stack_trace)
+            logging.info(f'🔄 开始更换账号...')
+            # 释放旧账号（标记为不可用）
+            if self.account:
+                await self.account_pool.release_account(self.account, False)
+
+            # 获取新账号
+            self.account = await self.account_pool.acquire()
+            if not self.account:
+                raise Exception("❌ 无法获取新账号")
+
+            # 创建新客户端
+            self.client = await self.client_manager.get_client(
+                email=self.account.email,
+                username=self.account.username,
+                password=self.account.password,
+                proxy=self.account.proxy
+            )
+
+            # 更新当前协程的名字
+            current_task = asyncio.current_task()
+            if current_task:
+                new_name = await self._task_counter.get_name(self.account.email.split('@')[0])
+                current_task.set_name(new_name)
+                logging.info(f'✅ 账号更换成功，新账号: {self.account.email}，协程名称更新为: {new_name}')
+            return True
+        except AccountSuspended as e:
+            logging.warning(f'🚫 账号【{self.account.email}】换号失败，尝试继续换号')
+            await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+            return False
+        except Exception as e:
+            logging.error(f'❌ 更换账号失败: {str(e)}', exc_info=True)
+            raise

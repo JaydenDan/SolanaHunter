@@ -39,7 +39,7 @@ class MonitorCore:
             self.listener.start_listening(),
             name=task_name
         )
-        logging.info("🚀 实时监控系统已启动")
+        logging.info("✅ 实时监控系统已启动")
 
     async def stop(self):
         """分阶段安全关闭（无超时）"""

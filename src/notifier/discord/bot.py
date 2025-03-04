@@ -41,9 +41,8 @@ class DiscordBot:
                     proxy_url,
                     enable_cleanup_closed=True  # 自动清理关闭连接
                 )
-                logging.info(f"✅ Proxy enabled: {proxy_url}")
             except ValueError as e:
-                logging.error(f"❌ Proxy config error: {e}")
+                logging.error(f"❌ Discord代理配置错误: {e}")
                 raise
 
         # 意图配置（2.x必须显式声明）
@@ -64,29 +63,22 @@ class DiscordBot:
         # 事件监听
         @self.bot.event
         async def on_connect():
-            logging.info("⌛ Connecting to Discord...")
+            logging.info("⌛ 正在连接Discord...")
 
         @self.bot.event
         async def on_ready():
-            logging.info(f"✅ Discord 机器人已登录（通过代理）: {self.bot.user}")
-            # 调试输出实际使用的出口IP
-            try:
-                resp = await self.bot.http._HTTPClient__session.get("https://api.ipify.org")
-                ip = await resp.text()
-                logging.info(f"📍 Discord Bot 出口 IP: {ip}")
-            except Exception as e:
-                logging.warning(f"❌ IP 检测失败: {str(e)}")
+            logging.info(f"✅ Discord机器人已就绪")
 
         # 安全启动流程
         try:
-            self._task = asyncio.create_task(self._run_bot())
+            self._task = asyncio.create_task(self._run_bot(), name="DiscordBot")
             await asyncio.wait_for(self.bot.wait_until_ready(), timeout=60)
             self._initialized = True
         except asyncio.TimeoutError:
-            logging.error("⌛ Bot startup timed out")
+            logging.error("❌ Discord机器人启动超时")
             raise
         except discord.PrivilegedIntents as e:
-            logging.critical(f"❌ Missing privileged intents: {e}")
+            logging.critical(f"❌ Discord权限不足: {e}")
             raise
 
     async def _run_bot(self) -> None:
@@ -94,11 +86,11 @@ class DiscordBot:
         try:
             await self.bot.start(settings.DISCORD["token"])
         except discord.LoginFailure:
-            logging.critical("❌ Invalid token or proxy auth failed")
+            logging.critical("❌ Discord登录失败，请检查token或代理")
             self._initialized = False
             raise
         except Exception as e:
-            logging.error(f"❌ Bot runtime error: {repr(e)}")
+            logging.error(f"❌ Discord运行错误: {str(e)}")
             self._initialized = False
             raise
 
@@ -110,12 +102,12 @@ class DiscordBot:
     ):
         """发送消息（最多重试3次）"""
         if not self.bot:
-            raise RuntimeError("❌ Discord 机器人未初始化！请先调用 init_bot()")
+            raise RuntimeError("❌ Discord机器人未初始化")
 
         async with self._lock:
             channel = self.bot.get_channel(channel_id)
             if not channel:
-                logging.info(f"⚠️ 频道 {channel_id} 未找到！")
+                logging.error(f"❌ Discord频道未找到: {channel_id}")
                 return
 
             # 内容预处理
@@ -133,10 +125,10 @@ class DiscordBot:
                     break  # 发送成功则退出循环
                 except ConnectionResetError as e:
                     if attempt < max_retries - 1:
-                        logging.info(f"⚠️ 发送失败（{attempt + 1}/{max_retries}）: {e}，1秒后重试...")
+                        logging.warning(f"⚠️ Discord消息发送失败，重试中 ({attempt + 1}/{max_retries})")
                         await asyncio.sleep(1)  # 固定间隔1秒
                     else:
-                        logging.info(f"❌ 最终发送失败: {e}")
+                        logging.error(f"❌ Discord消息发送失败: {str(e)}")
                         raise  # 重试用尽后抛出原始异常
 
     async def close(self) -> None:
@@ -150,17 +142,68 @@ class DiscordBot:
                 self.bot.tree.clear_commands(guild=None)
 
             await self.bot.close()
-            logging.info("🔌 Discord connection closed")
+            logging.info("✅ Discord连接已关闭")
 
         if self._connector:
             await self._connector.close()
-            logging.info("🔌 Proxy connector closed")
 
         self._initialized = False
 
-    async def __aenter__(self):
-        await self.init_bot()
-        return self
+    async def send_account_error(
+            self,
+            account,
+            error_info: str,
+            stack_trace: Optional[str] = None
+    ) -> None:
+        """
+        推送账号错误消息到Discord
+        :param account: Twitter账号对象
+        :param error_info: 错误信息
+        :param stack_trace: 堆栈跟踪信息（可选）
+        """
+        if not self.bot:
+            raise RuntimeError("❌ Discord 机器人未初始化！请先调用 init_bot()")
 
-    async def __aexit__(self, *exc):
-        await self.close()
+        # 创建一个红色的embed
+        embed = discord.Embed(
+            title="🚨 Twitter账号异常警报",
+            description=error_info,
+            color=discord.Color.red(),
+            timestamp=discord.utils.utcnow()
+        )
+
+        # 添加账号信息
+        embed.add_field(
+            name="📧 账号信息",
+            value=f"```\n"
+                  f"邮箱: {account.email}\n"
+                  f"用户名: {account.username}\n"
+                  f"代理: {account.proxy}\n"
+                  f"```",
+            inline=False
+        )
+
+        if stack_trace:
+            # 如果传入的是traceback对象，将其转换为字符串
+            if hasattr(stack_trace, 'format'):
+                import traceback
+                stack_trace = ''.join(traceback.format_tb(stack_trace))
+            
+            # 限制堆栈信息长度
+            max_length = 1000
+            if len(str(stack_trace)) > max_length:
+                stack_trace = str(stack_trace)[:max_length] + "...(已截断)"
+            
+            embed.add_field(
+                name="🔍 错误详情", 
+                value=f"```python\n{stack_trace}\n```",
+                inline=False
+            )
+
+        # 添加时间戳和页脚
+        embed.set_footer(text="发生时间: " + discord.utils.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
+
+        # 发送消息
+        await self.send_message(settings.DISCORD['channel']['system_channel'], embed=embed)
+
+    
