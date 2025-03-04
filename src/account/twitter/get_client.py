@@ -118,8 +118,7 @@ class TwitterClientManager:
                     await asyncio.sleep(delay)
                     continue
                 else:
-                    raise Exception(f"❌ 获取客户端失败：{error_type}异常 ({email})，已重试 {max_retries} 次") from e
-
+                    raise AccountSuspended(f"❌ 获取客户端失败：{error_type}异常 ({email})，已重试 {max_retries} 次") from e
             except Exception as e:
                 if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
                     logging.warning(f'🚫 获取客户端失败：账号【{email}】疑似封禁-AttributeError，需要更换账号')

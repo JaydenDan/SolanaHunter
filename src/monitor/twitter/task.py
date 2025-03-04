@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Optional
 
 from httpcore import ConnectError
+import httpcore
+import httpx
 from socksio import ProtocolError
 from twikit import AccountSuspended
 
@@ -55,15 +57,11 @@ class SearchTask:
                 password=self.account.password,
                 proxy=self.account.proxy
             )
-            if self.client:
-                logging.info(f'🎯Twikit Client初始化完毕! 加载账号: {self.account.email}')
-            else:
-                # 如果获取客户端失败但没有抛出异常，也需要换号
-                logging.warning(f'⚠️ 初始化客户端失败，重新初始化客户端: {self.account.email}')
-                await self.initialize_client()
+
+            logging.info(f'🎯Twikit Client初始化完毕! 加载账号: {self.account.email}')
         except AccountSuspended as e:
-            logging.warning(f'⚠️ 账号【{self.account.email}】初始化Twikit Client失败，换号重新初始化')
-            await self.initialize_client()
+            # 抛出错误来源提供的信息
+            raise e
         except Exception as e:
             # 其他异常直接抛出
             raise Exception(f'❌ 初始化客户端失败，当前search_task将被放弃。') from e
@@ -85,7 +83,18 @@ class SearchTask:
     async def run(self):
         """执行搜索任务"""
         try:
-            await self.initialize_client()
+            while True:
+                try:
+                    await self.initialize_client()
+                    break
+                except AccountSuspended as e:
+                    logging.warning(f'🚫 账号初始化失败，尝试更换账号重新初始化')
+                    success = await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                    if not success:
+                        raise Exception(f'❌ 初始化客户端失败，无法获取可用账号。') from e
+                except Exception as e:
+                    raise Exception(f'❌ 初始化客户端失败，当前search_task将被放弃。') from e
+
             logging.info(f'🔛 搜索任务已启动，使用账号: {self.account.email}')
             while True:
                 await asyncio.sleep(20)
@@ -194,10 +203,17 @@ class SearchTask:
                 }
                 for tweet in search_result
             ]
-        except ConnectError as e:
-            logging.warning(f'🌐 网络连接失败: {str(e)}')
-        except ProtocolError as e:
-            logging.warning(f'🌐 代理连接失败: {str(e)}')
+        except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout) as e:
+            # 不同类型错误输出不同日志
+            if isinstance(e, httpx.ConnectError):
+                logging.warning(f'🌐 网络连接失败（httpx）: {str(e)}')
+            elif isinstance(e, httpcore.ConnectError):
+                logging.warning(f'🌐 网络连接失败（httpcore）: {str(e)}')
+            elif isinstance(e, ProtocolError):
+                logging.warning(f'🌐 代理连接失败（ProtocolError）: {str(e)}')
+            elif isinstance(e, httpcore.ConnectTimeout):
+                logging.warning(f'🌐 连接超时（httpcore）: {str(e)}')
+            return []
         except AccountSuspended as e:
             if 'Rate limit exceeded' in str(e):
                 logging.warning(f'🚫 账号【{self.account.email}】达到限流-429')
@@ -206,13 +222,10 @@ class SearchTask:
             if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
                 logging.warning(f'🚫 账号【{self.account.email}】疑似封禁-AttributeError')
                 await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
-                return []
             if "Forbidden" in str(e) or "403" in str(e):
                 logging.warning(f'🚫 账号【{self.account.email}】账号被禁止访问-403')
                 await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
-                return []
             logging.error(f"❌ 搜索失败: {str(e)}", exc_info=True)
-            raise Exception(f'❌ 搜索失败，当前search_task将被放弃。') from e
         return []
 
     async def _reinitialize_client(self, error_info: str, stack_trace: str):

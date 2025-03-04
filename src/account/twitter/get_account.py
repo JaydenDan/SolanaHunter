@@ -45,7 +45,16 @@ class AccountPool:
     def _init_accounts(self):
         """从Excel加载账户数据"""
         df = pd.read_excel(self.excel_path)
-        for _, row in df.iloc[::-1].iterrows():
+        # for _, row in df.iloc[::-1].iterrows():
+        #     account = TwitterAccount(
+        #         email=row['email'],
+        #         username=row['username'],
+        #         password=row['password'],
+        #         proxy=row['residential_proxy'],
+        #     )
+        #     self._accounts.append(account)
+        # 正向循环（从前往后）
+        for _, row in df.iterrows():
             account = TwitterAccount(
                 email=row['email'],
                 username=row['username'],
