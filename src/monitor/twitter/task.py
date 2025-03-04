@@ -89,7 +89,7 @@ class SearchTask:
                     break
                 except AccountSuspended as e:
                     logging.warning(f'🚫 账号初始化失败，尝试更换账号重新初始化')
-                    success = await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                    success = await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=e.__traceback__)
                     if not success:
                         raise Exception(f'❌ 初始化客户端失败，无法获取可用账号。') from e
                 except Exception as e:
@@ -203,28 +203,28 @@ class SearchTask:
                 }
                 for tweet in search_result
             ]
-        except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout) as e:
+        except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
             # 不同类型错误输出不同日志
-            if isinstance(e, httpx.ConnectError):
-                logging.warning(f'🌐 网络连接失败（httpx）: {str(e)}')
-            elif isinstance(e, httpcore.ConnectError):
-                logging.warning(f'🌐 网络连接失败（httpcore）: {str(e)}')
+            if isinstance(e, (httpx.ConnectError, httpcore.ConnectError)):
+                logging.warning(f'🌐 网络连接失败（{e.__class__.__name__}）: {str(e)}')
             elif isinstance(e, ProtocolError):
                 logging.warning(f'🌐 代理连接失败（ProtocolError）: {str(e)}')
-            elif isinstance(e, httpcore.ConnectTimeout):
-                logging.warning(f'🌐 连接超时（httpcore）: {str(e)}')
+            elif isinstance(e, (httpcore.ConnectTimeout, httpx.ConnectTimeout)):
+                logging.warning(f'🌐 连接超时（{e.__class__.__name__}）: {str(e)}')
+            elif isinstance(e, (httpx.ReadTimeout, httpcore.ReadTimeout)):
+                logging.warning(f'🌐 读取超时（{e.__class__.__name__}）: {str(e)}')
             return []
         except AccountSuspended as e:
             if 'Rate limit exceeded' in str(e):
                 logging.warning(f'🚫 账号【{self.account.email}】达到限流-429')
-                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=e.__traceback__)
         except Exception as e:
             if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
                 logging.warning(f'🚫 账号【{self.account.email}】疑似封禁-AttributeError')
-                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=e.__traceback__)
             if "Forbidden" in str(e) or "403" in str(e):
                 logging.warning(f'🚫 账号【{self.account.email}】账号被禁止访问-403')
-                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=e.__traceback__)
             logging.error(f"❌ 搜索失败: {str(e)}", exc_info=True)
         return []
 

@@ -58,7 +58,7 @@ class TwitterClientManager:
             password: str,
             proxy: str,  # 格式 "ip:port:user:pass"
             max_retries: int = 3,
-            retry_delay: int = 5
+            retry_delay: int = 3
     ) -> Client | None:
         """直接返回初始化完成的Client对象（可await调用）"""
         # 解析代理信息
@@ -110,15 +110,31 @@ class TwitterClientManager:
                 return client
 
             # 处理httpcore和httpx的连接错误
-            except (ProtocolError, httpx.ConnectError, httpcore.ConnectError) as e:
-                error_type = "代理协议" if isinstance(e, ProtocolError) else "网络连接"
+            except (ProtocolError, httpx.ConnectError, httpcore.ConnectError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
+                # 根据异常类型输出不同的错误信息
+                if isinstance(e, ProtocolError):
+                    error_type = "代理协议"
+                    error_detail = f"代理连接失败（ProtocolError）: {str(e)}"
+                elif isinstance(e, (httpx.ConnectTimeout, httpcore.ConnectTimeout)):
+                    error_type = "连接超时"
+                    error_detail = f"连接超时（{e.__class__.__name__}）: {str(e)}"
+
+                elif isinstance(e, (httpx.ConnectError, httpcore.ConnectError)):
+                    error_type = "网络连接"
+                    error_detail = f"网络连接失败（{e.__class__.__name__}）: {str(e)}"
+                elif isinstance(e, (httpx.ReadTimeout, httpcore.ReadTimeout)):
+                    error_type = "读取超时"
+                    error_detail = f"读取超时（{e.__class__.__name__}）: {str(e)}" 
+                else:
+                    error_type = "网络连接"
+                    error_detail = f"网络连接失败（{e.__class__.__name__}）: {str(e)}"
                 if attempt < max_retries:
                     delay = retry_delay * attempt
-                    logging.warning(f"🌐 获取客户端失败：{error_type}异常 ({email})，{attempt}/{max_retries} 次重试，等待 {delay} 秒")
+                    logging.warning(f"🌐 获取客户端失败：{error_type}异常 ({email}) - {error_detail}，{attempt}/{max_retries} 次重试，等待 {delay} 秒")
                     await asyncio.sleep(delay)
                     continue
                 else:
-                    raise AccountSuspended(f"❌ 获取客户端失败：{error_type}异常 ({email})，已重试 {max_retries} 次") from e
+                    raise AccountSuspended(f"❌ 获取客户端失败：{error_type}异常 ({email}) - {error_detail}，已重试 {max_retries} 次") from e
             except Exception as e:
                 if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
                     logging.warning(f'🚫 获取客户端失败：账号【{email}】疑似封禁-AttributeError，需要更换账号')
