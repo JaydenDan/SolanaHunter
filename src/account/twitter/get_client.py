@@ -3,7 +3,8 @@ import logging
 import os
 from typing import Any, Coroutine
 
-from httpcore import ConnectError
+import httpcore
+import httpx
 from socksio import ProtocolError
 from twikit.client.client import Client
 from twikit import AccountSuspended
@@ -108,7 +109,8 @@ class TwitterClientManager:
                 client.save_cookies(cookie_file)
                 return client
 
-            except (ProtocolError, ConnectError) as e:
+            # 处理httpcore和httpx的连接错误
+            except (ProtocolError, httpx.ConnectError, httpcore.ConnectError) as e:
                 error_type = "代理协议" if isinstance(e, ProtocolError) else "网络连接"
                 if attempt < max_retries:
                     delay = retry_delay * attempt
