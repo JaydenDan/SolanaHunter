@@ -68,22 +68,22 @@ class SearchTask:
             except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
                 # 不同类型错误输出不同日志
                 if isinstance(e, (httpx.ConnectError, httpcore.ConnectError)):
-                    logging.warning(f'🌐 初始化Tikit Client时网络连接失败（{e.__class__.__name__}）: {str(e)}，第{attempt + 1}次重试')
+                    logging.warning(f'🌐 初始化Tikit Client时网络连接失败({e.__class__.__name__}): {str(e)}, 第{attempt + 1}次重试')
                 elif isinstance(e, ProtocolError):
-                    logging.warning(f'🌐 初始化Tikit Client时代理连接失败（ProtocolError）: {str(e)}，第{attempt + 1}次重试')
+                    logging.warning(f'🌐 初始化Tikit Client时代理连接失败(ProtocolError): {str(e)}, 第{attempt + 1}次重试')
                 elif isinstance(e, (httpcore.ConnectTimeout, httpx.ConnectTimeout)):
-                    logging.warning(f'🌐 初始化Tikit Client时连接超时（{e.__class__.__name__}）: {str(e)}，第{attempt + 1}次重试')
+                    logging.warning(f'🌐 初始化Tikit Client时连接超时({e.__class__.__name__}): {str(e)}, 第{attempt + 1}次重试')
                 elif isinstance(e, (httpx.ReadTimeout, httpcore.ReadTimeout)):
-                    logging.warning(f'🌐 初始化Tikit Client时读取超时（{e.__class__.__name__}）: {str(e)}，第{attempt + 1}次重试')
+                    logging.warning(f'🌐 初始化Tikit Client时读取超时({e.__class__.__name__}): {str(e)}, 第{attempt + 1}次重试')
                 
                 if attempt < max_retries - 1:  # 如果不是最后一次尝试
                     await asyncio.sleep(retry_delay * (attempt + 1))  # 递增重试延迟
                     continue
-                # 最后一次重试也失败，抛出异常
-                raise Exception(f'❌ 初始化客户端失败，网络错误重试{max_retries}次均失败，当前任务的CA已退回') from e
+                # 最后一次重试也失败, 抛出异常
+                raise Exception(f'❌ 初始化客户端失败, 网络错误重试{max_retries}次均失败, 当前任务的CA已退回') from e
             except Exception as e:
                 # 其他异常直接抛出
-                raise Exception(f'❌ 初始化客户端失败，当前search_task将被放弃，当前任务的CA已退回') from e
+                raise Exception(f'❌ 初始化客户端失败, 当前search_task将被放弃, 当前任务的CA已退回') from e
 
     async def add_token(self, token: dict):
         async with self.lock:
@@ -105,19 +105,19 @@ class SearchTask:
                 try:
                     if not await self.initialize_client():
                         logging.warning(f'🚫 Twikit Client初始化失败, 尝试更换账号重新初始化')
-                        success = await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                        success = await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info='Twikit Client初始化为None')
                         if not success:
                             raise Exception(f'❌ 无法获取可用账号。') from e
                         break
                 except AccountSuspended as e:
                     logging.warning(f'🚫 账号被暂停, Twikit Client初始化失败, 尝试更换账号重新初始化')
-                    success = await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                    success = await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
                     if not success:
                         raise Exception(f'❌ 无法获取可用账号。') from e
                 except Exception as e:
                     raise Exception(f'❌ 初始化客户端失败, 当前search_task将被放弃。') from e
 
-            logging.info(f'🔛 搜索任务已启动，使用账号: {self.account.email}')
+            logging.info(f'🔛 搜索任务已启动, 使用账号: {self.account.email}')
             while True:
                 await asyncio.sleep(20)
                 async with self.lock:
@@ -147,7 +147,7 @@ class SearchTask:
                 async with self.lock:
                     self.mint_list.extend(remaining_mint_list)
                     if not self.mint_list and not self.token_list:
-                        logging.info(f'🏁 搜索任务已完成，释放账号: {self.account.email}')
+                        logging.info(f'🏁 搜索任务已完成, 释放账号: {self.account.email}')
                         await self.account_pool.release_account(self.account, True)
                         break
         except Exception as e:
@@ -158,7 +158,7 @@ class SearchTask:
             await self.on_finish_callback(self, self.account.email)
 
     async def _monitor_social_data(self, current_mint_list: list):
-        """监控CA的推特帖子，然后对有帖子的CA进行操作"""
+        """监控CA的推特帖子, 然后对有帖子的CA进行操作"""
         remaining_ca = current_mint_list.copy()
         try:
             if not current_mint_list:
@@ -229,35 +229,35 @@ class SearchTask:
         except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
             # 不同类型错误输出不同日志
             if isinstance(e, (httpx.ConnectError, httpcore.ConnectError)):
-                logging.warning(f'🌐 网络连接失败（{e.__class__.__name__}）: {str(e)}')
+                logging.warning(f'🌐 网络连接失败({e.__class__.__name__}): {str(e)}')
             elif isinstance(e, ProtocolError):
-                logging.warning(f'🌐 代理连接失败（ProtocolError）: {str(e)}')
+                logging.warning(f'🌐 代理连接失败(ProtocolError): {str(e)}')
             elif isinstance(e, (httpcore.ConnectTimeout, httpx.ConnectTimeout)):
-                logging.warning(f'🌐 连接超时（{e.__class__.__name__}）: {str(e)}')
+                logging.warning(f'🌐 连接超时({e.__class__.__name__}): {str(e)}')
             elif isinstance(e, (httpx.ReadTimeout, httpcore.ReadTimeout)):
-                logging.warning(f'🌐 读取超时（{e.__class__.__name__}）: {str(e)}')
+                logging.warning(f'🌐 读取超时({e.__class__.__name__}): {str(e)}')
             return []
         except AccountSuspended as e:
             if 'Rate limit exceeded' in str(e):
                 logging.warning(f'🚫 账号【{self.account.email}】达到限流-429')
-                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
         except Exception as e:
             if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
                 logging.warning(f'🚫 账号【{self.account.email}】疑似封禁-AttributeError')
-                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
             if "Forbidden" in str(e) or "403" in str(e):
                 logging.warning(f'🚫 账号【{self.account.email}】账号被禁止访问-403')
-                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
             logging.error(f"❌ 搜索失败: {str(e)}", exc_info=True)
         return []
 
-    async def _reinitialize_client(self, error_info: str, stack_trace: str):
-        """重新初始化客户端（更换账号）"""
+    async def _reinitialize_client(self, error_name: str, error_info: str):
+        """重新初始化客户端(更换账号)"""
         try:
             bot = DiscordBot()
-            await bot.send_account_error(self.account, error_info, stack_trace)
+            await bot.send_account_error(self.account, error_name, error_info)
             logging.info(f'🔄 开始更换账号...')
-            # 释放旧账号（标记为不可用）
+            # 释放旧账号(标记为不可用)
             await self.account_pool.release_account(self.account, False)
 
             # 获取新账号
@@ -278,11 +278,11 @@ class SearchTask:
             if current_task:
                 new_name = await self._task_counter.get_name(self.account.email.split('@')[0])
                 current_task.set_name(new_name)
-                logging.info(f'✅ 账号更换成功，新账号: {self.account.email}，协程名称更新为: {new_name}')
+                logging.info(f'✅ 账号更换成功, 新账号: {self.account.email}, 协程名称更新为: {new_name}')
             return True
         except AccountSuspended as e:
-            logging.warning(f'🚫 账号【{self.account.email}】换号失败，尝试继续换号')
-            await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+            logging.warning(f'🚫 账号【{self.account.email}】换号失败, 尝试继续换号')
+            await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
         except Exception as e:
             logging.error(f'❌ 更换账号失败: {str(e)}')
             return False

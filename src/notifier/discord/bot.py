@@ -152,8 +152,8 @@ class DiscordBot:
     async def send_account_error(
             self,
             account,
-            error_info: str,
-            stack_trace: Optional[str] = None
+            error_name: str,
+            error_info: Optional[str] = None
     ) -> None:
         """
         推送账号错误消息到Discord
@@ -167,7 +167,7 @@ class DiscordBot:
         # 创建一个红色的embed
         embed = discord.Embed(
             title="🚨 Twitter账号异常警报",
-            description=error_info,
+            description=error_name,
             color=discord.Color.red(),
             timestamp=discord.utils.utcnow()
         )
@@ -183,17 +183,12 @@ class DiscordBot:
             inline=False
         )
 
-        if stack_trace:
-            # 如果传入的是traceback对象，将其转换为字符串
-            if hasattr(stack_trace, 'format'):
-                import traceback
-                stack_trace = str(stack_trace).split('\n')[-1]
-            else:
-                stack_trace = str(stack_trace).split('\n')[-1]
-            
+        if error_info:
+            # 获取最后一行内容
+            last_line = error_info.strip().split('\n')[-1]
             embed.add_field(
                 name="🔍 错误详情", 
-                value=f"```python\n{stack_trace}\n```",
+                value=f"```python\n{last_line}\n```",
                 inline=False
             )
 
