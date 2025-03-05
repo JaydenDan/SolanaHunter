@@ -77,7 +77,6 @@ class TwitterClientManager:
                 if not proxy_valid:
                     logging.error(f"❌ 获取客户端失败：代理验证未通过 ({email})")
                     return None
-                    
                 cookie_file = self._get_cookie_path(email)
                 
                 # 存在Cookie时加载

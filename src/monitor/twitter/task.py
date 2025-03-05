@@ -57,7 +57,9 @@ class SearchTask:
                 password=self.account.password,
                 proxy=self.account.proxy
             )
-
+            if not self.client:
+                # 重新初始化
+                await self._reinitialize_client(error_info='Twikit Client初始化为None', stack_trace="代理验证未通过")
             logging.info(f'🎯Twikit Client初始化完毕! 加载账号: {self.account.email}')
         except AccountSuspended as e:
             # 抛出错误来源提供的信息
@@ -250,7 +252,8 @@ class SearchTask:
                 password=self.account.password,
                 proxy=self.account.proxy
             )
-
+            if not self.client:
+                await self._reinitialize_client(error_info='Twikit Client初始化为None', stack_trace="代理验证未通过")
             # 更新当前协程的名字
             current_task = asyncio.current_task()
             if current_task:
