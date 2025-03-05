@@ -48,9 +48,6 @@ class SearchTask:
     async def initialize_client(self):
         logging.info(f'🏹 开始初始化Twikit Client...')
 
-        max_retries = 3
-        retry_delay = 1  # 每次重试间隔1秒
-
         try:
             self.client = await self.client_manager.get_client(
                 email=self.account.email,
@@ -86,9 +83,11 @@ class SearchTask:
         try:
             while True:
                 try:
-                    if not await self.initialize_client():
+                    try:
+                        await self.initialize_client()
+                    except Exception as e:
                         logging.warning(f'🚫 Twikit Client初始化失败, 尝试更换账号重新初始化')
-                        success = await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info='Twikit Client初始化为None')
+                        success = await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
                         if not success:
                             raise Exception(f' 无法获取可用账号。') from e
                         break
@@ -138,7 +137,7 @@ class SearchTask:
         except Exception as e:
             logging.error(f'❌ 搜索任务运行错误: {str(e)}', exc_info=True)
             await self.account_pool.release_account(self.account, False)
-            self.on_error_callback(self.mint_list)
+            await self.on_error_callback(self.token_list)
         finally:
             await self.on_finish_callback(self, self.account.email)
 

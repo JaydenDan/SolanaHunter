@@ -86,7 +86,7 @@ class TwitterClientManager:
                     client.load_cookies(cookie_file)
                     try:
                         # 验证Cookie有效性
-                        await client.get_user_by_screen_name(username)
+                        await client.get_user_by_screen_name("elon")
                     # 处理httpcore和httpx的连接错误
                     except (ProtocolError, httpx.ConnectError, httpcore.ConnectError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
                         # 根据异常类型输出不同的错误信息
@@ -110,7 +110,7 @@ class TwitterClientManager:
                             logging.warning(f"🌐 获取客户端失败: {error_type}异常 ({email}) - {error_detail}, {attempt}/{max_retries} 次重试, 等待 {delay} 秒")
                             await asyncio.sleep(delay)
                             continue
-                    except Exception:
+                    except Exception as e:
                         if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
                             logging.warning(f'🚫 获取客户端失败: 账号【{email}】疑似封禁-AttributeError, 需要更换账号')
                             raise AccountSuspended("账号疑似封禁") from e

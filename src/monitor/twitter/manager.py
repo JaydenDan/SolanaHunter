@@ -169,8 +169,8 @@ class SearchTaskManager:
         except ValueError:
             logging.warning(f'⚠️ 尝试移除不存在的任务: {task_to_remove}')
 
-    async def recycle_token(self, cas_to_recycle):
+    async def recycle_token(self, token_to_recycle):
         """回收CA到等待列表"""
         async with self._pending_lock:
-            self._pending_token_list = cas_to_recycle + self._pending_token_list
+            self._pending_token_list = token_to_recycle + self._pending_token_list
 
