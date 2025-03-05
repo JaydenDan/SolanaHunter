@@ -69,7 +69,7 @@ class MonitorCore:
         # 第三步：清理基础设施
         logging.info("🛑 开始释放系统资源...")
         # 关闭账号池任务
-        account_pool = AccountPool()  # 单例模式会返回已存在的实例
+        account_pool = AccountPool("")  # 单例模式会返回已存在的实例
         await account_pool.close()
         
         bot = DiscordBot()
