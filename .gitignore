@@ -57,3 +57,7 @@ anaconda/
 # System Files
 .DS_Store
 Thumbs.db
+
+# Twitter Cookies
+src/account/twitter/cookies/*
+!src/account/twitter/cookies/.gitkeep

@@ -80,11 +80,9 @@ class SearchTask:
                     await asyncio.sleep(retry_delay * (attempt + 1))  # 递增重试延迟
                     continue
                 # 最后一次重试也失败，抛出异常
-                self.on_error_callback(self, self.mint_list)
                 raise Exception(f'❌ 初始化客户端失败，网络错误重试{max_retries}次均失败，当前任务的CA已退回') from e
             except Exception as e:
                 # 其他异常直接抛出
-                self.on_error_callback(self, self.mint_list)
                 raise Exception(f'❌ 初始化客户端失败，当前search_task将被放弃，当前任务的CA已退回') from e
 
     async def add_token(self, token: dict):
@@ -105,15 +103,19 @@ class SearchTask:
         try:
             while True:
                 try:
-                    await self.initialize_client()
-                    break
+                    if not await self.initialize_client():
+                        logging.warning(f'🚫 Twikit Client初始化失败, 尝试更换账号重新初始化')
+                        success = await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+                        if not success:
+                            raise Exception(f'❌ 无法获取可用账号。') from e
+                        break
                 except AccountSuspended as e:
-                    logging.warning(f'🚫 账号初始化失败，尝试更换账号重新初始化')
+                    logging.warning(f'🚫 账号被暂停, Twikit Client初始化失败, 尝试更换账号重新初始化')
                     success = await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
                     if not success:
-                        raise Exception(f'❌ 初始化客户端失败，无法获取可用账号。') from e
+                        raise Exception(f'❌ 无法获取可用账号。') from e
                 except Exception as e:
-                    raise Exception(f'❌ 初始化客户端失败，当前search_task将被放弃。') from e
+                    raise Exception(f'❌ 初始化客户端失败, 当前search_task将被放弃。') from e
 
             logging.info(f'🔛 搜索任务已启动，使用账号: {self.account.email}')
             while True:
@@ -151,6 +153,7 @@ class SearchTask:
         except Exception as e:
             logging.error(f'❌ 搜索任务运行错误: {str(e)}', exc_info=True)
             await self.account_pool.release_account(self.account, False)
+            self.on_error_callback(self, self.mint_list)
         finally:
             await self.on_finish_callback(self, self.account.email)
 
@@ -255,8 +258,7 @@ class SearchTask:
             await bot.send_account_error(self.account, error_info, stack_trace)
             logging.info(f'🔄 开始更换账号...')
             # 释放旧账号（标记为不可用）
-            if self.account:
-                await self.account_pool.release_account(self.account, False)
+            await self.account_pool.release_account(self.account, False)
 
             # 获取新账号
             self.account = await self.account_pool.acquire()
@@ -281,7 +283,6 @@ class SearchTask:
         except AccountSuspended as e:
             logging.warning(f'🚫 账号【{self.account.email}】换号失败，尝试继续换号')
             await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
-            return False
         except Exception as e:
-            logging.error(f'❌ 更换账号失败: {str(e)}', exc_info=True)
-            raise
+            logging.error(f'❌ 更换账号失败: {str(e)}')
+            return False
