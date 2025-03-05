@@ -476,3 +476,33 @@ class AccountPool:
                     return False
                 logging.error(f"❌ 账号【{account.email}】获取Twikit Client失败: {str(e)}", exc_info=True)
                 return False
+
+    async def close(self):
+        """关闭账号池，停止所有任务"""
+        logging.info("📴 开始关闭账号池任务...")
+        
+        # 关闭维护任务
+        if self._maintenance_task and not self._maintenance_task.done():
+            self._maintenance_task.cancel()
+            try:
+                await self._maintenance_task
+            except asyncio.CancelledError:
+                logging.info("✅ 账号池维护任务已停止")
+            except Exception as e:
+                logging.error(f"❌ 停止账号池维护任务时发生错误: {str(e)}")
+            finally:
+                self._maintenance_task = None
+
+        # 关闭文件监控任务
+        if self._file_monitor_task and not self._file_monitor_task.done():
+            self._file_monitor_task.cancel()
+            try:
+                await self._file_monitor_task
+            except asyncio.CancelledError:
+                logging.info("✅ 账号池Excel监控任务已停止")
+            except Exception as e:
+                logging.error(f"❌ 停止账号池Excel监控任务时发生错误: {str(e)}")
+            finally:
+                self._file_monitor_task = None
+
+        logging.info("✅ 账号池所有任务已关闭")
