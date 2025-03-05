@@ -18,9 +18,9 @@ from ...account.twitter import TwitterClientManager
 from ...account.twitter.get_account import AccountPool, TwitterAccount
 
 
-async def _search_words_maker(ca_list):
+async def _search_words_maker(mint_list):
     search_words = ''
-    for ca in ca_list:
+    for ca in mint_list:
         if search_words == '':
             search_words = search_words + ca
         else:
@@ -29,12 +29,13 @@ async def _search_words_maker(ca_list):
 
 
 class SearchTask:
-    def __init__(self, twitter_config: dict, on_finish_callback, account: TwitterAccount):
+    def __init__(self, twitter_config: dict, on_finish_callback, on_error_callback,account: TwitterAccount):
         self._task_counter = TaskCounter()
-        self.ca_list = []
+        self.mint_list = []
         self.token_list = []
         self.lock = asyncio.Lock()
         self.on_finish_callback = on_finish_callback
+        self.on_error_callback = on_error_callback
 
         if not Path(twitter_config['account_file_path']).exists():
             raise FileNotFoundError(f"Twitter账号文件路径无效: {twitter_config['account_file_path']}")
@@ -46,36 +47,55 @@ class SearchTask:
 
     async def initialize_client(self):
         logging.info(f'🏹 开始初始化Twikit Client...')
-        if not self.account:
-            logging.error("❌ 无法获取账号")
-            return
 
-        try:
-            self.client = await self.client_manager.get_client(
-                email=self.account.email,
-                username=self.account.username,
-                password=self.account.password,
-                proxy=self.account.proxy
-            )
+        max_retries = 3
+        retry_delay = 1  # 每次重试间隔1秒
 
-            logging.info(f'🎯Twikit Client初始化完毕! 加载账号: {self.account.email}')
-        except AccountSuspended as e:
-            # 抛出错误来源提供的信息
-            raise e
-        except Exception as e:
-            # 其他异常直接抛出
-            raise Exception(f'❌ 初始化客户端失败，当前search_task将被放弃。') from e
+        for attempt in range(max_retries):
+            try:
+                self.client = await self.client_manager.get_client(
+                    email=self.account.email,
+                    username=self.account.username,
+                    password=self.account.password,
+                    proxy=self.account.proxy
+                )
 
-    async def add_ca(self, token: dict):
+                logging.info(f'🎯Twikit Client初始化完毕! 加载账号: {self.account.email}')
+                return
+            except AccountSuspended as e:
+                # 抛出错误来源提供的信息
+                raise e
+            except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
+                # 不同类型错误输出不同日志
+                if isinstance(e, (httpx.ConnectError, httpcore.ConnectError)):
+                    logging.warning(f'🌐 初始化Tikit Client时网络连接失败（{e.__class__.__name__}）: {str(e)}，第{attempt + 1}次重试')
+                elif isinstance(e, ProtocolError):
+                    logging.warning(f'🌐 初始化Tikit Client时代理连接失败（ProtocolError）: {str(e)}，第{attempt + 1}次重试')
+                elif isinstance(e, (httpcore.ConnectTimeout, httpx.ConnectTimeout)):
+                    logging.warning(f'🌐 初始化Tikit Client时连接超时（{e.__class__.__name__}）: {str(e)}，第{attempt + 1}次重试')
+                elif isinstance(e, (httpx.ReadTimeout, httpcore.ReadTimeout)):
+                    logging.warning(f'🌐 初始化Tikit Client时读取超时（{e.__class__.__name__}）: {str(e)}，第{attempt + 1}次重试')
+                
+                if attempt < max_retries - 1:  # 如果不是最后一次尝试
+                    await asyncio.sleep(retry_delay * (attempt + 1))  # 递增重试延迟
+                    continue
+                # 最后一次重试也失败，抛出异常
+                self.on_error_callback(self, self.mint_list)
+                raise Exception(f'❌ 初始化客户端失败，网络错误重试{max_retries}次均失败，当前任务的CA已退回') from e
+            except Exception as e:
+                # 其他异常直接抛出
+                self.on_error_callback(self, self.mint_list)
+                raise Exception(f'❌ 初始化客户端失败，当前search_task将被放弃，当前任务的CA已退回') from e
+
+    async def add_token(self, token: dict):
         async with self.lock:
-            if len(self.ca_list) < 10:
+            if len(self.mint_list) < 10:
                 # 单独保存一份ca列表
-                self.ca_list.append(token["mint"])
+                self.mint_list.append(token["mint"])
                 # 保存一份代币信息列表
                 self.token_list.append({
                     "mint": token['mint'],
                     "token": token,
-                    "start_time": datetime.now()
                 })
                 return True
             return False
@@ -89,7 +109,7 @@ class SearchTask:
                     break
                 except AccountSuspended as e:
                     logging.warning(f'🚫 账号初始化失败，尝试更换账号重新初始化')
-                    success = await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=e.__traceback__)
+                    success = await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
                     if not success:
                         raise Exception(f'❌ 初始化客户端失败，无法获取可用账号。') from e
                 except Exception as e:
@@ -99,13 +119,13 @@ class SearchTask:
             while True:
                 await asyncio.sleep(20)
                 async with self.lock:
-                    current_ca = self.ca_list.copy()
-                    self.ca_list.clear()
+                    current_ca = self.mint_list.copy()
+                    self.mint_list.clear()
 
                     now = datetime.now()
                     expired_mints = [
                         t["mint"] for t in self.token_list
-                        if (now - t["start_time"]).total_seconds() > 600
+                        if (now - t["token"]['detect_time']).total_seconds() > 600
                     ]
                     if expired_mints:
                         logging.info(f'🆑 清理{len(expired_mints)}个超时CA')
@@ -118,13 +138,13 @@ class SearchTask:
                         if ca not in expired_mints
                     ]
 
-                remaining_ca_list = []
+                remaining_mint_list = []
                 if current_ca:
-                    remaining_ca_list = await self._monitor_social_data(current_ca)
+                    remaining_mint_list = await self._monitor_social_data(current_ca)
 
                 async with self.lock:
-                    self.ca_list.extend(remaining_ca_list)
-                    if not self.ca_list and not self.token_list:
+                    self.mint_list.extend(remaining_mint_list)
+                    if not self.mint_list and not self.token_list:
                         logging.info(f'🏁 搜索任务已完成，释放账号: {self.account.email}')
                         await self.account_pool.release_account(self.account, True)
                         break
@@ -134,19 +154,19 @@ class SearchTask:
         finally:
             await self.on_finish_callback(self, self.account.email)
 
-    async def _monitor_social_data(self, current_ca_list: list):
+    async def _monitor_social_data(self, current_mint_list: list):
         """监控CA的推特帖子，然后对有帖子的CA进行操作"""
-        remaining_ca = current_ca_list.copy()
+        remaining_ca = current_mint_list.copy()
         try:
-            if not current_ca_list:
+            if not current_mint_list:
                 return []
             # 生成搜索关键字
-            search_words = await _search_words_maker(current_ca_list)
+            search_words = await _search_words_maker(current_mint_list)
             # 搜索帖子
             tweets = await self._search_tweets(str(search_words), "Latest")
 
             if len(tweets) > 0:
-                cas_set = set(current_ca_list)
+                cas_set = set(current_mint_list)
                 remaining_ca, self.token_list = await engine.notify_process(
                     tweets=tweets,
                     cas_set=cas_set,
@@ -217,14 +237,14 @@ class SearchTask:
         except AccountSuspended as e:
             if 'Rate limit exceeded' in str(e):
                 logging.warning(f'🚫 账号【{self.account.email}】达到限流-429')
-                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=e.__traceback__)
+                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
         except Exception as e:
             if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
                 logging.warning(f'🚫 账号【{self.account.email}】疑似封禁-AttributeError')
-                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=e.__traceback__)
+                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
             if "Forbidden" in str(e) or "403" in str(e):
                 logging.warning(f'🚫 账号【{self.account.email}】账号被禁止访问-403')
-                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=e.__traceback__)
+                await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
             logging.error(f"❌ 搜索失败: {str(e)}", exc_info=True)
         return []
 

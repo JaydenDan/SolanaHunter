@@ -76,8 +76,9 @@ class TwitterClientManager:
                 proxy_valid = await check_proxy(client, proxy_info[0], socks_url)
                 if not proxy_valid:
                     logging.error(f"❌ 获取客户端失败：代理验证未通过 ({email})")
+                    # 这里返回None可以避免账号不经过代理而使用
                     return None
-                    
+
                 cookie_file = self._get_cookie_path(email)
                 
                 # 存在Cookie时加载
@@ -133,8 +134,6 @@ class TwitterClientManager:
                     logging.warning(f"🌐 获取客户端失败：{error_type}异常 ({email}) - {error_detail}，{attempt}/{max_retries} 次重试，等待 {delay} 秒")
                     await asyncio.sleep(delay)
                     continue
-                else:
-                    raise AccountSuspended(f"❌ 获取客户端失败：{error_type}异常 ({email}) - {error_detail}，已重试 {max_retries} 次") from e
             except Exception as e:
                 if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
                     logging.warning(f'🚫 获取客户端失败：账号【{email}】疑似封禁-AttributeError，需要更换账号')

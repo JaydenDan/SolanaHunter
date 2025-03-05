@@ -1,5 +1,6 @@
 # src/monitor/core.py（核心协调者）
 import asyncio
+from datetime import datetime
 import json
 import logging
 from pathlib import Path
@@ -89,6 +90,7 @@ class MonitorCore:
                     f'💰 监听到新的代币：Name=【{data["name"]}】 | Symbol=【{data["symbol"]}】 | CA=【{data["mint"]}】'
                 )
                 # 1. 把新代币CA丢给search_task_manager
+                data['detect_time'] = datetime.now()
                 await self.task_manager.add_new_token(data)
             else:
                 logging.warning("⚠️ 未知消息格式: %s", data)

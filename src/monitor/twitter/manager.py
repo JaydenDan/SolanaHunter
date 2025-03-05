@@ -14,7 +14,7 @@ class SearchTaskManager:
         self.manager_lock = asyncio.Lock()
 
         # 新增以下状态管理
-        self._pending_cas = []  # CA等待队列
+        self._pending_token_list = []  # CA等待队列
         self._is_creating_task = False  # 创建状态锁
         self._pending_lock = asyncio.Lock()  # CA队列操作锁
         self._task_counter = TaskCounter()
@@ -31,24 +31,24 @@ class SearchTaskManager:
         # 尝试添加到现有任务
         async with self.manager_lock:
             for task in self.search_tasks:
-                if await task.add_ca(token):
+                if await task.add_token(token):
                     logging.info(f'✅ CA【{token["mint"]}】已添加到现有搜索任务')
                     return
         0
         # 无法添加到现有任务，加入待处理队列
         async with self._pending_lock:
-            self._pending_cas.append(token)
-            pending_cas_length = len(self._pending_cas)
+            self._pending_token_list.append(token)
+            pending_token_length = len(self._pending_token_list)
 
         # 如果没有正在创建的任务，则触发新任务创建
         if not self._is_creating_task:
-            logging.info(f'🟢 CA【{token["mint"]}】触发新任务创建 (当前队列长度: {pending_cas_length})')
+            logging.info(f'🟢 CA【{token["mint"]}】触发新任务创建 (当前队列长度: {pending_token_length})')
             self._is_creating_task = True
             # 使用create_task避免阻塞当前方法
             task_name = await self._task_counter.get_name("创建搜索任务")
             asyncio.create_task(self._create_new_task_with_retry(), name=task_name)
         else:
-            logging.info(f'📋 CA【{token["mint"]}】已添加到等待队列 (当前队列长度: {pending_cas_length}，正在创建任务中)...')
+            logging.info(f'📋 CA【{token["mint"]}】已添加到等待队列 (当前队列长度: {pending_token_length}，正在创建任务中)...')
 
     async def _create_new_task_with_retry(self):
         """
@@ -64,9 +64,9 @@ class SearchTaskManager:
             batch = []
             async with self._pending_lock:
                 # 获取前10个CA
-                batch = self._pending_cas[:10]
+                batch = self._pending_token_list[:10]
                 # 从待处理队列中移除这些CA
-                self._pending_cas = self._pending_cas[10:]
+                self._pending_token_list = self._pending_token_list[10:]
             
             batch_size = len(batch)
             if batch_size == 0:
@@ -84,7 +84,7 @@ class SearchTaskManager:
             if not account:
                 logging.error("❌ 无法获取账号，回滚CA到待处理队列")
                 # 回滚CA到待处理队列
-                await self.recover_cas(batch)
+                await self.recover_token(batch)
                 # 重置创建状态标志
                 async with self._pending_lock:
                     self._is_creating_task = False
@@ -93,33 +93,32 @@ class SearchTaskManager:
             logging.info(f'✅ 已获取账号: {account.email}')
             
             # 创建新任务对象
-            new_task = SearchTask(settings.TWITTER, self.remove_task, account)
+            new_task = SearchTask(settings.TWITTER, self.remove_task, self.recycle_token, account)
             
             # 将CA添加到新任务中
-            ca_added = []
-            ca_add_failed = []
+            token_added = []
+            token_add_failed = []
             
             for token in batch:
-                if len(new_task.ca_list) < 10:
+                if len(new_task.mint_list) < 10:
                     # 添加到新任务
-                    new_task.ca_list.append(token["mint"])
+                    new_task.mint_list.append(token["mint"])
                     new_task.token_list.append({
                         "mint": token['mint'],
                         "token": token,
-                        "start_time": datetime.now()
                     })
-                    ca_added.append(token)
+                    token_added.append(token)
                 else:
                     # 任务已满，剩余的CA加入失败列表，理论上不会发生
-                    ca_add_failed.append(token)
+                    token_add_failed.append(token)
             
             # 处理未能添加的CA，理论上不会发生
-            if ca_add_failed:
-                await self.recover_cas(ca_add_failed)
-                logging.info(f'⚠️ {len(ca_add_failed)} 个CA无法添加到当前任务，已回滚到待处理队列')
+            if token_add_failed:
+                await self.recover_token(token_add_failed)
+                logging.info(f'⚠️ {len(token_add_failed)} 个CA无法添加到当前任务，已回滚到待处理队列')
             
             # 如果没有成功添加任何CA，则释放账号并返回，理论上不会发生
-            if not ca_added:
+            if not token_added:
                 logging.warning(f'⚠️ 没有CA被添加到新任务，释放账号并取消创建')
                 await self.account_pool.release_account(account, True)
                 # 重置创建状态标志
@@ -136,33 +135,32 @@ class SearchTaskManager:
                 # 将新任务添加到任务列表
                 async with self.manager_lock:
                     self.search_tasks.append(new_task)
-                logging.info(f'✅ 已创建并启动新任务【{task_name}】，成功加载 {len(ca_added)}/{batch_size} 个CA')
+                logging.info(f'✅ 已创建并启动新任务【{task_name}】，成功加载 {len(token_added)}/{batch_size} 个CA')
             except Exception as e:
                 logging.error(f'❌ 启动搜索任务失败：{e}', exc_info=True)
                 # 回滚已添加的CA
-                await self.recover_cas(ca_added)
+                await self.recover_token(token_added)
                 # 释放账号
                 await self.account_pool.release_account(account, False)
         except Exception as e:
             logging.error(f"❌ 任务创建过程发生错误: {e}", exc_info=True)
             # 确保回滚所有CA
             if 'batch' in locals():
-                await self.recover_cas(batch)
+                await self.recover_token(batch)
         finally:
             # 重置创建状态标志
             async with self.manager_lock:
                 self._is_creating_task = False
             # 检查是否还有待处理的CA
-            # 注意：我们不会在这里自动创建新任务，而是等待下一个新代币触发
             async with self._pending_lock:
-                if self._pending_cas:
-                    cas_count = len(self._pending_cas)
-                    logging.info(f'📝 等待队列中还有 {cas_count} 个CA待处理，等待下一个新代币触发创建')
+                if self._pending_token_list:
+                    token_count = len(self._pending_token_list)
+                    logging.info(f'📝 等待队列中还有 {token_count} 个CA待处理，等待下一个新代币触发创建')
 
-    async def recover_cas(self, cas_to_recover):
+    async def recover_token(self, token_to_recover):
         """恢复CA到等待队列"""
         async with self._pending_lock:
-            self._pending_cas = cas_to_recover + self._pending_cas
+            self._pending_token_list = token_to_recover + self._pending_token_list
 
     async def remove_task(self, task_to_remove, task_email):
         try:
@@ -170,3 +168,9 @@ class SearchTaskManager:
             logging.info(f'📴 已关闭搜索协程【{task_email}】')
         except ValueError:
             logging.warning(f'⚠️ 尝试移除不存在的任务: {task_to_remove}')
+
+    async def recycle_token(self, cas_to_recycle):
+        """回收CA到等待列表"""
+        async with self._pending_lock:
+            self._pending_token_list = cas_to_recycle + self._pending_token_list
+

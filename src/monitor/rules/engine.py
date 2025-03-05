@@ -13,7 +13,7 @@ async def notify_process(tweets, cas_set, token_list, remaining_ca):
         # 获取文本中的CA内容，一般只有一个
         tcas = common_util.get_ca_in_tweet(t['text'])
         for tca in tcas:
-            logging.info(f'🔍️ 当前搜索到的推特帖子内容为【{t["text"]}】')
+            logging.info(f'🔍️ 当前搜索到的推特帖子内容为:\n【{t["text"]}】')
             if tca in cas_set:
                 # 根据mint在token_list中查找token完整信息
                 matched_item = next(

@@ -178,7 +178,7 @@ class DiscordBot:
             value=f"```\n"
                   f"邮箱: {account.email}\n"
                   f"用户名: {account.username}\n"
-                  f"代理: {account.proxy}\n"
+                  f"代理: {account.proxy.split(':')[0]}:{account.proxy.split(':')[1]}\n"
                   f"```",
             inline=False
         )
@@ -187,12 +187,9 @@ class DiscordBot:
             # 如果传入的是traceback对象，将其转换为字符串
             if hasattr(stack_trace, 'format'):
                 import traceback
-                stack_trace = ''.join(traceback.format_tb(stack_trace))
-            
-            # 限制堆栈信息长度
-            max_length = 1000
-            if len(str(stack_trace)) > max_length:
-                stack_trace = str(stack_trace)[:max_length] + "...(已截断)"
+                stack_trace = str(stack_trace).split('\n')[-1]
+            else:
+                stack_trace = str(stack_trace).split('\n')[-1]
             
             embed.add_field(
                 name="🔍 错误详情", 
