@@ -11,7 +11,7 @@ from twikit import AccountSuspended
 
 
 async def check_proxy(client: Client, proxy_ip, socks_url):
-    """验证代理是否生效（带ProtocolError重试机制）"""
+    """验证代理是否生效(带ProtocolError重试机制)"""
     max_retries = 3
     retry_delay = 1  # 重试间隔秒数
 
@@ -22,20 +22,20 @@ async def check_proxy(client: Client, proxy_ip, socks_url):
 
             # 保持原有的IP验证逻辑
             if current_ip not in socks_url:
-                logging.error(f"❌ 代理未生效，当前IP: {current_ip}，期望代理IP：{proxy_ip}")
+                logging.error(f"❌ 代理未生效, 当前IP: {current_ip}, 期望代理IP: {proxy_ip}")
                 return False
             return True
 
         except ProtocolError as pe:  # 捕获特定协议错误
             if attempt < max_retries:
-                logging.warning(f"⚠️ 代理协议错误，正在重试 ({attempt}/{max_retries})")
+                logging.warning(f"⚠️ 代理协议错误, 正在重试 ({attempt}/{max_retries})")
                 await asyncio.sleep(retry_delay * attempt)
             else:
-                logging.error("❌ 连续三次代理协议错误，跳过IP检查")
+                logging.error("❌ 连续三次代理协议错误, 跳过IP检查")
                 return False
 
         except Exception as e:  # 其他异常立即抛出
-            logging.error(f"❌ 代理验证失败：{str(e)}", exc_info=True)
+            logging.error(f"❌ 代理验证失败: {str(e)}", exc_info=True)
             return False
     return False
 
@@ -60,13 +60,13 @@ class TwitterClientManager:
             max_retries: int = 3,
             retry_delay: int = 3
     ) -> Client | None:
-        """直接返回初始化完成的Client对象（可await调用）"""
+        """直接返回初始化完成的Client对象(可await调用)"""
         # 解析代理信息
         for attempt in range(1, max_retries + 1):
             try:
                 proxy_info = proxy.split(':')
                 if len(proxy_info) != 4:
-                    raise ValueError("代理格式错误，正确格式：ip:port:username:password")
+                    raise ValueError("代理格式错误, 正确格式: ip:port:username:password")
 
                 # 构建代理URL
                 socks_url = f'socks5://{proxy_info[2]}:{proxy_info[3]}@{proxy_info[0]}:{proxy_info[1]}'
@@ -75,9 +75,9 @@ class TwitterClientManager:
                 # 检查代理IP应用是否正确
                 proxy_valid = await check_proxy(client, proxy_info[0], socks_url)
                 if not proxy_valid:
-                    logging.error(f"❌ 获取客户端失败：代理验证未通过 ({email})")
+                    logging.error(f"❌ 获取客户端失败: 代理验证未通过 ({email})")
                     # 这里返回None可以避免账号不经过代理而使用
-                    return None
+                    raise AccountSuspended(f" 获取客户端失败: 代理验证未通过 ({email})")
 
                 cookie_file = self._get_cookie_path(email)
                 
@@ -87,59 +87,53 @@ class TwitterClientManager:
                     try:
                         # 验证Cookie有效性
                         await client.get_user_by_screen_name(username)
+                    # 处理httpcore和httpx的连接错误
+                    except (ProtocolError, httpx.ConnectError, httpcore.ConnectError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
+                        # 根据异常类型输出不同的错误信息
+                        if isinstance(e, ProtocolError):
+                            error_type = "代理协议"
+                            error_detail = f"代理连接失败(ProtocolError): {str(e)}"
+                        elif isinstance(e, (httpx.ConnectTimeout, httpcore.ConnectTimeout)):
+                            error_type = "连接超时"
+                            error_detail = f"连接超时({e.__class__.__name__}): {str(e)}"
+                        elif isinstance(e, (httpx.ConnectError, httpcore.ConnectError)):
+                            error_type = "网络连接"
+                            error_detail = f"网络连接失败({e.__class__.__name__}): {str(e)}"
+                        elif isinstance(e, (httpx.ReadTimeout, httpcore.ReadTimeout)):
+                            error_type = "读取超时"
+                            error_detail = f"读取超时({e.__class__.__name__}): {str(e)}" 
+                        else:
+                            error_type = "网络连接"
+                            error_detail = f"网络连接失败({e.__class__.__name__}): {str(e)}"
+                        if attempt < max_retries:
+                            delay = retry_delay * attempt
+                            logging.warning(f"🌐 获取客户端失败: {error_type}异常 ({email}) - {error_detail}, {attempt}/{max_retries} 次重试, 等待 {delay} 秒")
+                            await asyncio.sleep(delay)
+                            continue
                     except Exception:
-                        logging.warning(f'⚠️ Cookie失效，执行重新登录 ({email})')
+                        if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
+                            logging.warning(f'🚫 获取客户端失败: 账号【{email}】疑似封禁-AttributeError, 需要更换账号')
+                            raise AccountSuspended("账号疑似封禁") from e
+                        if "Forbidden" in str(e) or "403" in str(e):
+                            logging.warning(f'🚫 获取客户端失败: 账号【{email}】账号被禁止访问-403, 需要更换账号')
+                            raise AccountSuspended("账号被禁止访问") from e
+                        logging.warning(f'⚠️ Cookie失效, 执行重新登录 ({email})')
                         if os.path.exists(cookie_file):
                             os.remove(cookie_file)
-
-                        await client.login(
-                            auth_info_1=username,
-                            auth_info_2=email,
-                            password=password
-                        )
-                        logging.info(f'✅ 登录成功 ({email})')
-                else:
+                try:
                     await client.login(
                         auth_info_1=username,
                         auth_info_2=email,
                         password=password
                     )
                     logging.info(f'✅ 登录成功 ({email})')
+                except Exception as e:
+                    logging.warning(f'🔒 登录失败 ({email})')
+                    raise e
                 
                 # 保存Cookie并返回初始化完成的客户端
                 client.save_cookies(cookie_file)
                 return client
-
-            # 处理httpcore和httpx的连接错误
-            except (ProtocolError, httpx.ConnectError, httpcore.ConnectError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
-                # 根据异常类型输出不同的错误信息
-                if isinstance(e, ProtocolError):
-                    error_type = "代理协议"
-                    error_detail = f"代理连接失败（ProtocolError）: {str(e)}"
-                elif isinstance(e, (httpx.ConnectTimeout, httpcore.ConnectTimeout)):
-                    error_type = "连接超时"
-                    error_detail = f"连接超时（{e.__class__.__name__}）: {str(e)}"
-
-                elif isinstance(e, (httpx.ConnectError, httpcore.ConnectError)):
-                    error_type = "网络连接"
-                    error_detail = f"网络连接失败（{e.__class__.__name__}）: {str(e)}"
-                elif isinstance(e, (httpx.ReadTimeout, httpcore.ReadTimeout)):
-                    error_type = "读取超时"
-                    error_detail = f"读取超时（{e.__class__.__name__}）: {str(e)}" 
-                else:
-                    error_type = "网络连接"
-                    error_detail = f"网络连接失败（{e.__class__.__name__}）: {str(e)}"
-                if attempt < max_retries:
-                    delay = retry_delay * attempt
-                    logging.warning(f"🌐 获取客户端失败：{error_type}异常 ({email}) - {error_detail}，{attempt}/{max_retries} 次重试，等待 {delay} 秒")
-                    await asyncio.sleep(delay)
-                    continue
             except Exception as e:
-                if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
-                    logging.warning(f'🚫 获取客户端失败：账号【{email}】疑似封禁-AttributeError，需要更换账号')
-                    raise AccountSuspended("账号疑似封禁") from e
-                if "Forbidden" in str(e) or "403" in str(e):
-                    logging.warning(f'🚫 获取客户端失败：账号【{email}】账号被禁止访问-403，需要更换账号')
-                    raise AccountSuspended("账号被禁止访问") from e
-                raise Exception(f"❌ 获取客户端失败：未知错误 ({email}): {str(e)}") from e
-
+                logging.error(f"❌ 获取客户端失败: 未知错误 ({email}): {str(e)}")
+                raise e

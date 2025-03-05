@@ -9,7 +9,7 @@ from httpcore import ConnectError
 import httpcore
 import httpx
 from socksio import ProtocolError
-from twikit import AccountSuspended
+from twikit import AccountSuspended, Unauthorized
 
 from src.notifier.discord.bot import DiscordBot
 from src.utils.common_util import TaskCounter
@@ -51,39 +51,22 @@ class SearchTask:
         max_retries = 3
         retry_delay = 1  # 每次重试间隔1秒
 
-        for attempt in range(max_retries):
-            try:
-                self.client = await self.client_manager.get_client(
-                    email=self.account.email,
-                    username=self.account.username,
-                    password=self.account.password,
-                    proxy=self.account.proxy
-                )
+        try:
+            self.client = await self.client_manager.get_client(
+                email=self.account.email,
+                username=self.account.username,
+                password=self.account.password,
+                proxy=self.account.proxy
+            )
 
-                logging.info(f'🎯Twikit Client初始化完毕! 加载账号: {self.account.email}')
-                return
-            except AccountSuspended as e:
-                # 抛出错误来源提供的信息
-                raise e
-            except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
-                # 不同类型错误输出不同日志
-                if isinstance(e, (httpx.ConnectError, httpcore.ConnectError)):
-                    logging.warning(f'🌐 初始化Tikit Client时网络连接失败({e.__class__.__name__}): {str(e)}, 第{attempt + 1}次重试')
-                elif isinstance(e, ProtocolError):
-                    logging.warning(f'🌐 初始化Tikit Client时代理连接失败(ProtocolError): {str(e)}, 第{attempt + 1}次重试')
-                elif isinstance(e, (httpcore.ConnectTimeout, httpx.ConnectTimeout)):
-                    logging.warning(f'🌐 初始化Tikit Client时连接超时({e.__class__.__name__}): {str(e)}, 第{attempt + 1}次重试')
-                elif isinstance(e, (httpx.ReadTimeout, httpcore.ReadTimeout)):
-                    logging.warning(f'🌐 初始化Tikit Client时读取超时({e.__class__.__name__}): {str(e)}, 第{attempt + 1}次重试')
-                
-                if attempt < max_retries - 1:  # 如果不是最后一次尝试
-                    await asyncio.sleep(retry_delay * (attempt + 1))  # 递增重试延迟
-                    continue
-                # 最后一次重试也失败, 抛出异常
-                raise Exception(f'❌ 初始化客户端失败, 网络错误重试{max_retries}次均失败, 当前任务的CA已退回') from e
-            except Exception as e:
-                # 其他异常直接抛出
-                raise Exception(f'❌ 初始化客户端失败, 当前search_task将被放弃, 当前任务的CA已退回') from e
+            logging.info(f'🎯Twikit Client初始化完毕! 加载账号: {self.account.email}')
+            return
+        except AccountSuspended as e:
+            # 抛出错误来源提供的信息
+            raise e
+        except Exception as e:
+            # 其他异常直接抛出
+            raise Exception(f'❌ 初始化客户端失败, 当前search_task将被放弃, 当前任务的CA已退回') from e
 
     async def add_token(self, token: dict):
         async with self.lock:
@@ -107,16 +90,18 @@ class SearchTask:
                         logging.warning(f'🚫 Twikit Client初始化失败, 尝试更换账号重新初始化')
                         success = await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info='Twikit Client初始化为None')
                         if not success:
-                            raise Exception(f'❌ 无法获取可用账号。') from e
+                            raise Exception(f' 无法获取可用账号。') from e
                         break
-                except AccountSuspended as e:
-                    logging.warning(f'🚫 账号被暂停, Twikit Client初始化失败, 尝试更换账号重新初始化')
+                except (AccountSuspended, Unauthorized) as e:
+                    if isinstance(e, AccountSuspended):
+                        logging.warning(f'🚫 账号被暂停, Twikit Client初始化失败, 尝试更换账号重新初始化')
+                    elif isinstance(e, Unauthorized):
+                        logging.warning(f'🔒 账号无法认证, Twikit Client初始化失败, 尝试更换账号重新初始化') 
                     success = await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
                     if not success:
-                        raise Exception(f'❌ 无法获取可用账号。') from e
+                        raise Exception(f' 无法获取可用账号。')
                 except Exception as e:
-                    raise Exception(f'❌ 初始化客户端失败, 当前search_task将被放弃。') from e
-
+                    raise Exception(f' 初始化客户端失败, 当前search_task将被放弃') from e
             logging.info(f'🔛 搜索任务已启动, 使用账号: {self.account.email}')
             while True:
                 await asyncio.sleep(20)
@@ -153,7 +138,7 @@ class SearchTask:
         except Exception as e:
             logging.error(f'❌ 搜索任务运行错误: {str(e)}', exc_info=True)
             await self.account_pool.release_account(self.account, False)
-            self.on_error_callback(self, self.mint_list)
+            self.on_error_callback(self.mint_list)
         finally:
             await self.on_finish_callback(self, self.account.email)
 
@@ -272,16 +257,18 @@ class SearchTask:
                 password=self.account.password,
                 proxy=self.account.proxy
             )
-
+            if not self.client:
+                raise AccountSuspended(f"❌ 获取客户端失败: 账号【{self.account.email}】")
             # 更新当前协程的名字
             current_task = asyncio.current_task()
             if current_task:
+                original_name = current_task.get_name()
                 new_name = await self._task_counter.get_name(self.account.email.split('@')[0])
                 current_task.set_name(new_name)
-                logging.info(f'✅ 账号更换成功, 新账号: {self.account.email}, 协程名称更新为: {new_name}')
+                logging.info(f'✅ 账号更换成功, 新账号: {self.account.email}, 协程名称更新为: {new_name}, 原协程名称: {original_name}')
             return True
         except AccountSuspended as e:
-            logging.warning(f'🚫 账号【{self.account.email}】换号失败, 尝试继续换号')
+            logging.warning(f'🚫 账号【{self.account.email}】换号失败, 尝试继续换号: 【{str(e)}】')
             await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
         except Exception as e:
             logging.error(f'❌ 更换账号失败: {str(e)}')
