@@ -61,3 +61,6 @@ Thumbs.db
 # Twitter Cookies
 src/account/twitter/cookies/*
 !src/account/twitter/cookies/.gitkeep
+
+cookies/*
+!cookies/.gitkeep
