@@ -8,23 +8,23 @@ from src.notifier.discord.bot import DiscordBot
 from src.utils import common_util
 
 
-async def notify_process(tweets, token_set, token_list, remaining_token):
+async def notify_process(tweets, mint_set, token_list, remaining_mint):
     for t in tweets:
         # 获取文本中的CA内容, 一般只有一个
-        tweet_token_list = common_util.get_mint_in_tweet(t['text'])
-        for tweet_token in tweet_token_list:
+        tweet_mint_list = common_util.get_mint_in_tweet(t['text'])
+        for tweet_mint in tweet_mint_list:
             logging.info(f'🔍️ 当前搜索到的推特帖子内容为:\n【{t["text"]}】')
-            if tweet_token in token_set:
+            if tweet_mint in mint_set:
                 # 根据mint在token_list中查找token完整信息
                 matched_item = next(
                     (item for item in token_list
-                     if item.get("mint") == tweet_token),
+                     if item.get("mint") == tweet_mint),
                     None  # 找不到时返回 None
                 )
 
                 if matched_item is None:
                     logging.warning(
-                        f'⚠️ 未找到匹配的 token, CA: {tweet_token}, 可能是一个CA有多个推文, 在前一个推文触发时已将该CA移出列表。')
+                        f'⚠️ 未找到匹配的 token, CA: {tweet_mint}, 可能是一个CA有多个推文, 在前一个推文触发时已将该CA移出列表。')
                     continue  # 跳过或执行其他逻辑
                 data = matched_item['token']
                 logging.info(f'CA反搜索到的数据【{data}】')
@@ -64,13 +64,13 @@ async def notify_process(tweets, token_set, token_list, remaining_token):
                     # 处理搜索到帖子的CA
                     # 如果满足规则通知了, 就删除该CA, 否则继续搜索下一条推文
                     await _start_notify(context)
-                    if tweet_token in remaining_token:
-                        remaining_token.remove(tweet_token)
+                    if tweet_mint in remaining_mint:
+                        remaining_mint.remove(tweet_mint)
                         # 删除已处理的token信息
-                        token_list = [item for item in token_list if item.get("mint") != tweet_token]
+                        token_list = [item for item in token_list if item.get("mint") != tweet_mint]
             else:
-                logging.warning(f"⚠️ 当前推特中的CA【{tweet_token}】不在CA监控名单中, 请检查程序逻辑！")
-        return remaining_token, token_list
+                logging.warning(f"⚠️ 当前推特中的CA【{tweet_mint}】不在CA监控名单中, 请检查程序逻辑！")
+        return remaining_mint, token_list
 
 
 async def _start_notify(context):

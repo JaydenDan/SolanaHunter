@@ -3,9 +3,6 @@ import logging
 
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
-
-from httpcore import ConnectError
 import httpcore
 import httpx
 from socksio import ProtocolError
@@ -147,10 +144,10 @@ class SearchTask:
             tweets = await self._search_tweets(str(search_words), "Latest")
 
             if len(tweets) > 0:
-                cas_set = set(current_mint_list)
+                mint_set = set(current_mint_list)
                 remaining_mint, self.token_list = await engine.notify_process(
                     tweets=tweets,
-                    cas_set=cas_set,
+                    mint_set=mint_set,
                     token_list=self.token_list,
                     remaining_mint=remaining_mint
                 )
