@@ -6,7 +6,7 @@ from pathlib import Path
 import httpcore
 import httpx
 from socksio import ProtocolError
-from twikit import AccountSuspended, Unauthorized
+from twikit import AccountSuspended, Unauthorized, TooManyRequests
 
 from src.notifier.discord.bot import DiscordBot
 from src.utils.common_util import TaskCounter
@@ -231,7 +231,7 @@ class SearchTask:
                     return []
             
                 await asyncio.sleep(wait_time)
-            except AccountSuspended as e:
+            except (AccountSuspended, TooManyRequests) as e:
                 if 'Rate limit exceeded' in str(e):
                     logging.warning(f'🚫 账号【{self.account.email}】达到限流-429')
                     await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
@@ -243,9 +243,10 @@ class SearchTask:
                 elif "Forbidden" in str(e) or "403" in str(e):
                     logging.warning(f'🚫 账号【{self.account.email}】账号被禁止访问-403')
                     await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
-                logging.error(f"❌ 搜索失败: {str(e)}", exc_info=True)
+                else:
+                    logging.error(f"❌ 搜索失败: {str(e)}")
+                    raise Exception(f' 未预先处理的错误') from e
                 return []
-        return []
 
     async def _reinitialize_client(self, error_name: str, error_info: str):
         """重新初始化客户端(更换账号)"""
