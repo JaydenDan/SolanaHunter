@@ -254,18 +254,18 @@ class SearchTask:
             )
             if not self.client:
                 await self._reinitialize_client(error_info='Twikit Client初始化为None', stack_trace="代理验证未通过")
-            # 更新当前协程的名字
-            current_task = asyncio.current_task()
-            if current_task:
-                original_name = current_task.get_name()
-                new_name = await self._task_counter.get_name(self.account.email.split('@')[0])
-                current_task.set_name(new_name)
-                logging.info(f'✅ 账号更换成功, 新账号: {self.account.email}, 协程名称更新为: {new_name}')
-            return True
+            else:
+                # 更新当前协程的名字
+                current_task = asyncio.current_task()
+                if current_task:
+                    original_name = current_task.get_name()
+                    new_name = await self._task_counter.get_name(self.account.email.split('@')[0])
+                    current_task.set_name(new_name)
+                    logging.info(f'✅ 账号更换成功, 新账号: {self.account.email}, 协程名称更新为: {new_name}, 原协程名称: {original_name}')
+                return True
         except AccountSuspended as e:
             logging.warning(f'🚫 账号【{self.account.email}】换号失败, 尝试继续换号')
-            await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
-            return False
+            return await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
         except Exception as e:
             logging.error(f'❌ 更换账号失败: {str(e)}')
             return False

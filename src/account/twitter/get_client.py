@@ -60,40 +60,40 @@ class TwitterClientManager:
             max_retries: int = 3,
             retry_delay: int = 3
     ) -> Client | None:
-        """直接返回初始化完成的Client对象(可await调用)"""
-        # 解析代理信息
-        for attempt in range(1, max_retries + 1):
-            try:
-                proxy_info = proxy.split(':')
-                if len(proxy_info) != 4:
-                    raise ValueError("代理格式错误, 正确格式: ip:port:username:password")
+        try:
+            # 解析代理信息
+            proxy_info = proxy.split(':')
+            if len(proxy_info) != 4:
+                raise ValueError("代理格式错误, 正确格式: ip:port:username:password")
 
-                # 构建代理URL
-                socks_url = f'socks5://{proxy_info[2]}:{proxy_info[3]}@{proxy_info[0]}:{proxy_info[1]}'
-                client = Client(language='en-US', proxy=socks_url)
-                
-                # 检查代理IP应用是否正确
-                proxy_valid = await check_proxy(client, proxy_info[0], socks_url)
-                if not proxy_valid:
-                    logging.error(f"❌ 获取客户端失败：代理验证未通过 ({email})")
-                    return None
-                cookie_file = self._get_cookie_path(email)
-                
-                # 尝试加载和验证Cookie
-                need_login = True
-                if os.path.exists(cookie_file):
-                    client.load_cookies(cookie_file)
-                    try:
-                        # 验证Cookie有效性
-                        await client.get_user_by_screen_name(username)
-                        need_login = False
-                        logging.info(f'✅ Cookie验证成功 ({email})')
-                    except Exception:
-                        logging.warning(f'⚠️ Cookie失效，执行重新登录 ({email})')
-                        os.remove(cookie_file)
+            # 构建代理URL
+            socks_url = f'socks5://{proxy_info[2]}:{proxy_info[3]}@{proxy_info[0]}:{proxy_info[1]}'
+            client = Client(language='en-US', proxy=socks_url)
+            
+            # 检查代理IP应用是否正确
+            proxy_valid = await check_proxy(client, proxy_info[0], socks_url)
+            if not proxy_valid:
+                logging.error(f"❌ 获取客户端失败：代理验证未通过 ({email})")
+                return None
+            cookie_file = self._get_cookie_path(email)
+            
+            # 尝试加载和验证Cookie
+            need_login = True
+            if os.path.exists(cookie_file):
+                client.load_cookies(cookie_file)
+                try:
+                    # 验证Cookie有效性
+                    await client.get_user_by_screen_name(username)
+                    need_login = False
+                    logging.info(f'✅ Cookie验证成功 ({email})')
+                except Exception:
+                    logging.warning(f'⚠️ Cookie失效, 执行重新登录 ({email})')
+                    os.remove(cookie_file)
 
-                # 需要登录时执行登录流程
-                if need_login:
+            # 需要登录时执行登录流程
+            if need_login:
+                retry_count = 0
+                while retry_count < max_retries:
                     try:
                         await client.login(
                             auth_info_1=username,
@@ -101,19 +101,44 @@ class TwitterClientManager:
                             password=password
                         )
                         logging.info(f'✅ 登录成功 ({email})')
+                        break  # 登录成功，跳出重试循环
+                    except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
+                        retry_count += 1
+                        wait_time = retry_count
+                        # 不同类型错误输出不同日志
+                        if isinstance(e, (httpx.ConnectError, httpcore.ConnectError)):
+                            logging.warning(f'🌐 网络连接失败({e.__class__.__name__}): {str(e)} - 重试 {retry_count}/{max_retries}, {wait_time}秒后重试')
+                        elif isinstance(e, ProtocolError):
+                            logging.warning(f'🌐 代理连接失败(ProtocolError): {str(e)} - 重试 {retry_count}/{max_retries}, {wait_time}秒后重试')
+                        elif isinstance(e, (httpcore.ConnectTimeout, httpx.ConnectTimeout)):
+                            logging.warning(f'🌐 连接超时({e.__class__.__name__}): {str(e)} - 重试 {retry_count}/{max_retries}, {wait_time}秒后重试')
+                        elif isinstance(e, (httpx.ReadTimeout, httpcore.ReadTimeout)):
+                            logging.warning(f'🌐 读取超时({e.__class__.__name__}): {str(e)} - 重试 {retry_count}/{max_retries}, {wait_time}秒后重试')
+                        
+                        if retry_count >= max_retries:
+                            logging.error(f'❌ 登录失败: 网络错误重试{max_retries}次后仍然失败')
+                            raise  # 重试耗尽，抛出最后一次的异常
+                        
+                        await asyncio.sleep(wait_time)  # 等待后重试
+                        continue
+                        
                     except Exception as e:
                         logging.error(f'❌ 登录失败 ({email}): {str(e)}')
                         raise
-                
-                # 保存Cookie并返回初始化完成的客户端
-                client.save_cookies(cookie_file)
-                return client
-            except Exception as e:
-                if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
-                    logging.warning(f'🚫 获取客户端失败：账号【{email}】疑似封禁-AttributeError，需要更换账号')
-                    return None
-                if "Forbidden" in str(e) or "403" in str(e):
-                    logging.warning(f'🚫 获取客户端失败：账号【{email}】账号被禁止访问-403，需要更换账号')
-                    return None
-                raise Exception(f"❌ 获取客户端失败：未知错误 ({email}): {str(e)}") from e
+
+            # 保存Cookie并返回初始化完成的客户端
+            client.save_cookies(cookie_file)
+            return client
+            
+        except Exception as e:
+            if "You'll need to wait before trying to log in again. Some blocks are removed automatically." in str(e):
+                logging.warning(f'🚫 获取客户端失败：账号【{email}】暂时封锁, 需要更换账号')
+                return None
+            if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
+                logging.warning(f'🚫 获取客户端失败：账号【{email}】疑似封禁-AttributeError, 需要更换账号')
+                return None
+            if "Forbidden" in str(e) or "403" in str(e):
+                logging.warning(f'🚫 获取客户端失败：账号【{email}】账号被禁止访问-403, 需要更换账号')
+                return None
+            raise
 

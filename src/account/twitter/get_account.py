@@ -55,27 +55,47 @@ class AccountPool:
         self._initialized = True
 
     def _init_accounts(self):
-        """从Excel加载账户数据"""
+        """
+        从Excel加载账户数据
+        :param reverse: 是否反向加载账号 (从后往前) ，默认False为正向加载 (从前往后) 
+        """
         if os.path.exists(self.excel_path):
             self._last_modified_time = os.path.getmtime(self.excel_path)
             df = pd.read_excel(self.excel_path)
             # 清空现有账号列表
             self._accounts.clear()
-            # 正向循环（从前往后）
-            for _, row in df.iterrows():
-                account = TwitterAccount(
-                    email=row['email'],
-                    username=row['username'],
-                    password=row['password'],
-                    proxy=row['residential_proxy'],
-                )
-                self._accounts.append(account)
+            reverse = True
+            # 根据reverse参数决定循环方向
+            if reverse:
+                # 反向循环 (从后往前) 
+                logging.info("📊 以反向顺序加载账号 (从后往前) ")
+                for i in range(len(df)-1, -1, -1):
+                    row = df.iloc[i]
+                    account = TwitterAccount(
+                        email=row['email'],
+                        username=row['username'],
+                        password=row['password'],
+                        proxy=row['residential_proxy'],
+                    )
+                    self._accounts.append(account)
+            else:
+                # 正向循环 (从前往后) 
+                logging.info("📊 以正向顺序加载账号 (从前往后) ")
+                for _, row in df.iterrows():
+                    account = TwitterAccount(
+                        email=row['email'],
+                        username=row['username'],
+                        password=row['password'],
+                        proxy=row['residential_proxy'],
+                    )
+                    self._accounts.append(account)
+                
             logging.info(f"📊 从Excel加载了 {len(self._accounts)} 个Twitter账号")
         else:
             logging.error(f"❌ Excel文件不存在: {self.excel_path}")
 
     async def reload_accounts(self):
-        """重新加载Excel账户数据（热更新）"""
+        """重新加载Excel账户数据 (热更新) """
         async with self._lock:
             logging.info(f"🔄 开始热更新Excel账号数据: {self.excel_path}")
             
@@ -249,7 +269,7 @@ class AccountPool:
                 embed=overview_embed
             )
 
-            # 按状态分组处理账号详情（不包括可用账号）
+            # 按状态分组处理账号详情 (不包括可用账号) 
             status_groups = {
                 "🔴 不可用账号": [acc for acc in self._accounts if acc.disabled],
                 "🟡 使用中账号": [acc for acc in self._accounts if acc.in_use]
@@ -260,7 +280,7 @@ class AccountPool:
                 if not accounts:
                     continue
 
-                # 将账号分成更小的批次（每批最多5个账号）
+                # 将账号分成更小的批次 (每批最多5个账号) 
                 for i in range(0, len(accounts), 5):
                     batch = accounts[i:i + 5]
                     
@@ -387,28 +407,26 @@ class AccountPool:
         :param account: Twitter账号对象
         :return: 测试是否通过
         """
-        max_retries = 3
-        base_delay = 2
-
-        for attempt in range(max_retries):
-            try:
-                # 获取客户端并尝试登录
-                client = await self.client_manager.get_client(
-                    email=account.email,
-                    username=account.username,
-                    password=account.password,
-                    proxy=account.proxy
-                )
-                if client is None:
-                    logging.error(f"❌ 账号【{account.email}】获取Twikit Client失败")
-                    return False
-                # 尝试执行一次搜索操作
-                await client.search_tweet("elon", "Latest")
-                logging.info(f"✅ 账号【{account.email}】测试通过")
-                return True
-            except Exception as e:
-                logging.warning(f"❌ 账号【{account.email}】搜索测试失败: {str(e)}")
+        try:
+            # 获取客户端并尝试登录
+            client = await self.client_manager.get_client(
+                email=account.email,
+                username=account.username,
+                password=account.password,
+                proxy=account.proxy
+            )
+            if client is None:
+                logging.error(f"❌ 账号【{account.email}】获取Twikit Client失败")
                 return False
+            
+            # 尝试执行一次搜索操作
+            await client.search_tweet("elon", "Latest")
+            logging.info(f"✅ 账号【{account.email}】测试通过")
+            return True
+        
+        except Exception as e:
+            logging.warning(f"❌ 账号【{account.email}】搜索测试失败: {str(e)}")
+            return False
 
     async def close(self):
         """关闭账号池，停止所有协程任务"""
