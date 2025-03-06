@@ -158,8 +158,8 @@ class DiscordBot:
         """
         推送账号错误消息到Discord
         :param account: Twitter账号对象
-        :param error_info: 错误信息
-        :param stack_trace: 堆栈跟踪信息（可选）
+        :param error_name: 错误名称
+        :param error_info: 错误信息 
         """
         if not self.bot:
             raise RuntimeError("❌ Discord 机器人未初始化！请先调用 init_bot()")

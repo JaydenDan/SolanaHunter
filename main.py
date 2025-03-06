@@ -72,6 +72,6 @@ if __name__ == "__main__":
 # TODO 推文全推 + 粉丝判断 ✅
 # TODO solana监控
 # TODO 搜索任务崩的时候把任务的ca列表还回去 ✅
-# TODO 住宅ip可用性检测 ⭕️ 改成了热更新账号Excel
-
+# TODO 住宅ip可用性检测 ⭕️ 改成了热更新账号Excel ✅
+# TODO 网络错误时加上重试机制 
 
