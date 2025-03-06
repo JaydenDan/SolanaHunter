@@ -8,23 +8,23 @@ from src.notifier.discord.bot import DiscordBot
 from src.utils import common_util
 
 
-async def notify_process(tweets, cas_set, token_list, remaining_ca):
+async def notify_process(tweets, token_set, token_list, remaining_token):
     for t in tweets:
-        # 获取文本中的CA内容，一般只有一个
-        tcas = common_util.get_ca_in_tweet(t['text'])
-        for tca in tcas:
+        # 获取文本中的CA内容, 一般只有一个
+        tweet_token_list = common_util.get_mint_in_tweet(t['text'])
+        for tweet_token in tweet_token_list:
             logging.info(f'🔍️ 当前搜索到的推特帖子内容为:\n【{t["text"]}】')
-            if tca in cas_set:
+            if tweet_token in token_set:
                 # 根据mint在token_list中查找token完整信息
                 matched_item = next(
                     (item for item in token_list
-                     if item.get("mint") == tca),
+                     if item.get("mint") == tweet_token),
                     None  # 找不到时返回 None
                 )
 
                 if matched_item is None:
                     logging.warning(
-                        f'⚠️ 未找到匹配的 token，CA: {tca}，可能是一个CA有多个推文，在前一个推文触发时已将该CA移出列表。')
+                        f'⚠️ 未找到匹配的 token, CA: {tweet_token}, 可能是一个CA有多个推文, 在前一个推文触发时已将该CA移出列表。')
                     continue  # 跳过或执行其他逻辑
                 data = matched_item['token']
                 logging.info(f'CA反搜索到的数据【{data}】')
@@ -62,15 +62,15 @@ async def notify_process(tweets, cas_set, token_list, remaining_ca):
                         "social": t
                     }
                     # 处理搜索到帖子的CA
-                    # 如果满足规则通知了，就删除该CA，否则继续搜索下一条推文
+                    # 如果满足规则通知了, 就删除该CA, 否则继续搜索下一条推文
                     await _start_notify(context)
-                    if tca in remaining_ca:
-                        remaining_ca.remove(tca)
+                    if tweet_token in remaining_token:
+                        remaining_token.remove(tweet_token)
                         # 删除已处理的token信息
-                        token_list = [item for item in token_list if item.get("mint") != tca]
+                        token_list = [item for item in token_list if item.get("mint") != tweet_token]
             else:
-                logging.warning(f"⚠️ 当前推特中的CA【{tca}】不在CA监控名单中，请检查程序逻辑！")
-        return remaining_ca, token_list
+                logging.warning(f"⚠️ 当前推特中的CA【{tweet_token}】不在CA监控名单中, 请检查程序逻辑！")
+        return remaining_token, token_list
 
 
 async def _start_notify(context):
@@ -83,28 +83,28 @@ async def _start_notify(context):
 
         # 判断是否创始人发币
         if _founder_judge(context):
-            logging.info(f"🔥 检测到创始人发型代币，准备通知： CA【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
+            logging.info(f"🔥 检测到创始人发型代币, 准备通知： CA【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
             await bot.send_message(channel_id=settings.DISCORD['channel']['founder_twitter'], embed=embed)
         else:
             followers_count = context['social']['user']['followers_count']
             if 0 <= followers_count < 1000:
-                logging.info(f"🔥 当前代币发推账户粉丝数 < 一千，准备通知： CA【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
+                logging.info(f"🔥 当前代币发推账户粉丝数 < 一千, 准备通知： CA【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
                 await bot.send_message(channel_id=settings.DISCORD['channel']['all_twitter'], embed=embed)
 
             elif 1000 <= followers_count < 3000:
-                logging.info(f"🔥 当前代币发推账户粉丝数 > 一千，准备通知： CA【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
+                logging.info(f"🔥 当前代币发推账户粉丝数 > 一千, 准备通知： CA【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
                 await bot.send_message(channel_id=settings.DISCORD['channel']['1000~3000_fans'], embed=embed)
 
             elif 3000 <= followers_count < 5000:
-                logging.info(f"🔥 当前代币发推账户粉丝数 > 三千，准备通知：【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
+                logging.info(f"🔥 当前代币发推账户粉丝数 > 三千, 准备通知：【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
                 await bot.send_message(channel_id=settings.DISCORD['channel']['3000~5000_fans'], embed=embed)
 
             elif 5000 <= followers_count < 10000:
-                logging.info(f"🔥 当前代币发推账户粉丝数 > 五千，准备通知：【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
+                logging.info(f"🔥 当前代币发推账户粉丝数 > 五千, 准备通知：【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
 
                 await bot.send_message(channel_id=settings.DISCORD['channel']['5000~10000_fans'], embed=embed)
             elif 10000 <= followers_count:
-                logging.info(f"🔥 当前代币发推账户粉丝数 > 一万，准备通知：【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
+                logging.info(f"🔥 当前代币发推账户粉丝数 > 一万, 准备通知：【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
                 await bot.send_message(channel_id=settings.DISCORD['channel']['10000+_fans'], embed=embed)
 
     except Exception as e:
@@ -207,11 +207,11 @@ def _founder_judge(context):
     """创始人判断 + 带官网"""
     if ((context['name'] in context['social']['user']['name'] or context['name'] in context['social']['user']['screen_name'] or context['name'] in context['social']['user']['description'])
             and context['social']['user']['display_url'] and 't.me' not in context['social']['user']['expanded_url']):
-        logging.info(f"🏆 匹配成功，当前CA的名称 {context['name']} 在 {context['social']['user']['screen_name']} 找到")
+        logging.info(f"🏆 匹配成功, 当前CA的名称 {context['name']} 在 {context['social']['user']['screen_name']} 找到")
         return True
     if ((context['symbol'] in context['social']['user']['name'] or context['symbol'] in context['social']['user']['screen_name'] or context['symbol'] in context['social']['user']['description'])
             and context['social']['user']['display_url'] and 't.me' not in context['social']['user']['expanded_url']):
-        logging.info(f"🏆 匹配成功，当前CA的符号 {context['symbol']} 在 {context['social']['user']['screen_name']} 找到")
+        logging.info(f"🏆 匹配成功, 当前CA的符号 {context['symbol']} 在 {context['social']['user']['screen_name']} 找到")
         return True
-    logging.info(f"🚫 匹配失败，当前CA的名称 {context['name']} 发帖人 {context['social']['user']['screen_name']} 不是项目方")
+    logging.info(f"🚫 匹配失败, 当前CA的名称 {context['name']} 发帖人 {context['social']['user']['screen_name']} 不是项目方")
     return False

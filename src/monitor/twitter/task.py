@@ -29,14 +29,13 @@ async def _search_words_maker(mint_list):
 
 
 class SearchTask:
-    def __init__(self, twitter_config: dict, on_finish_callback, on_error_callback,account: TwitterAccount):
+    def __init__(self, twitter_config: dict, on_finish_callback, on_error_callback, account: TwitterAccount):
         self._task_counter = TaskCounter()
         self.mint_list = []
         self.token_list = []
         self.lock = asyncio.Lock()
         self.on_finish_callback = on_finish_callback
         self.on_error_callback = on_error_callback
-
         if not Path(twitter_config['account_file_path']).exists():
             raise FileNotFoundError(f"Twitter账号文件路径无效: {twitter_config['account_file_path']}")
         self.account_file_path = twitter_config['account_file_path']
@@ -55,7 +54,9 @@ class SearchTask:
                 password=self.account.password,
                 proxy=self.account.proxy
             )
-
+            if not self.client:
+                # 重新初始化
+                await self._reinitialize_client(error_info='Twikit Client初始化为None', stack_trace="代理验证未通过")
             logging.info(f'🎯Twikit Client初始化完毕! 加载账号: {self.account.email}')
             return
         except AccountSuspended as e:
@@ -63,7 +64,7 @@ class SearchTask:
             raise e
         except Exception as e:
             # 其他异常直接抛出
-            raise Exception(f'❌ 初始化客户端失败, 当前search_task将被放弃, 当前任务的CA已退回') from e
+            raise Exception(f'❌ 初始化客户端失败, 当前search_task将被放弃。') from e
 
     async def add_token(self, token: dict):
         async with self.lock:
@@ -83,24 +84,16 @@ class SearchTask:
         try:
             while True:
                 try:
-                    try:
-                        await self.initialize_client()
-                    except Exception as e:
-                        logging.warning(f'🚫 Twikit Client初始化失败, 尝试更换账号重新初始化')
-                        success = await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
-                        if not success:
-                            raise Exception(f' 无法获取可用账号。') from e
-                        break
-                except (AccountSuspended, Unauthorized) as e:
-                    if isinstance(e, AccountSuspended):
-                        logging.warning(f'🚫 账号被暂停, Twikit Client初始化失败, 尝试更换账号重新初始化')
-                    elif isinstance(e, Unauthorized):
-                        logging.warning(f'🔒 账号无法认证, Twikit Client初始化失败, 尝试更换账号重新初始化') 
-                    success = await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
+                    await self.initialize_client()
+                    break
+                except AccountSuspended as e:
+                    logging.warning(f'🚫 账号初始化失败, 尝试更换账号重新初始化')
+                    success = await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=e.__traceback__)
                     if not success:
-                        raise Exception(f' 无法获取可用账号。')
+                        raise Exception(f'❌ 初始化客户端失败, 无法获取可用账号。') from e
                 except Exception as e:
-                    raise Exception(f' 初始化客户端失败, 当前search_task将被放弃') from e
+                    raise Exception(f'❌ 初始化客户端失败, 当前search_task将被放弃。') from e
+
             logging.info(f'🔛 搜索任务已启动, 使用账号: {self.account.email}')
             while True:
                 await asyncio.sleep(20)
@@ -111,7 +104,7 @@ class SearchTask:
                     now = datetime.now()
                     expired_mints = [
                         t["mint"] for t in self.token_list
-                        if (now - t["token"]['detect_time']).total_seconds() > 600
+                        if (now - t['token']["detect_time"]).total_seconds() > 600
                     ]
                     if expired_mints:
                         logging.info(f'🆑 清理{len(expired_mints)}个超时CA')
@@ -135,7 +128,8 @@ class SearchTask:
                         await self.account_pool.release_account(self.account, True)
                         break
         except Exception as e:
-            logging.error(f'❌ 搜索任务运行错误: {str(e)}', exc_info=True)
+            logging.error(f'❌ 搜索任务运行错误: {str(e)}, 剩余Token已回滚到待处理队列', exc_info=True)
+            await self.on_error_callback(self.token_list)
             await self.account_pool.release_account(self.account, False)
             await self.on_error_callback(self.token_list)
         finally:
@@ -143,7 +137,7 @@ class SearchTask:
 
     async def _monitor_social_data(self, current_mint_list: list):
         """监控CA的推特帖子, 然后对有帖子的CA进行操作"""
-        remaining_ca = current_mint_list.copy()
+        remaining_mint = current_mint_list.copy()
         try:
             if not current_mint_list:
                 return []
@@ -154,16 +148,16 @@ class SearchTask:
 
             if len(tweets) > 0:
                 cas_set = set(current_mint_list)
-                remaining_ca, self.token_list = await engine.notify_process(
+                remaining_mint, self.token_list = await engine.notify_process(
                     tweets=tweets,
                     cas_set=cas_set,
                     token_list=self.token_list,
-                    remaining_ca=remaining_ca
+                    remaining_mint=remaining_mint
                 )
-            return remaining_ca
+            return remaining_mint
         except Exception as e:
             logging.error(f"❌ 社交媒体数据获取失败: {str(e)}", exc_info=True)
-            return remaining_ca
+            return remaining_mint
 
     async def _search_tweets(self, query: str, product: str) -> list:
         """
@@ -257,18 +251,19 @@ class SearchTask:
                 proxy=self.account.proxy
             )
             if not self.client:
-                raise AccountSuspended(f"❌ 获取客户端失败: 账号【{self.account.email}】")
+                await self._reinitialize_client(error_info='Twikit Client初始化为None', stack_trace="代理验证未通过")
             # 更新当前协程的名字
             current_task = asyncio.current_task()
             if current_task:
                 original_name = current_task.get_name()
                 new_name = await self._task_counter.get_name(self.account.email.split('@')[0])
                 current_task.set_name(new_name)
-                logging.info(f'✅ 账号更换成功, 新账号: {self.account.email}, 协程名称更新为: {new_name}, 原协程名称: {original_name}')
+                logging.info(f'✅ 账号更换成功, 新账号: {self.account.email}, 协程名称更新为: {new_name}')
             return True
         except AccountSuspended as e:
-            logging.warning(f'🚫 账号【{self.account.email}】换号失败, 尝试继续换号: 【{str(e)}】')
-            await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
+            logging.warning(f'🚫 账号【{self.account.email}】换号失败, 尝试继续换号')
+            await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
+            return False
         except Exception as e:
             logging.error(f'❌ 更换账号失败: {str(e)}')
             return False

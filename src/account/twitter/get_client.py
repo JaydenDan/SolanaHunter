@@ -75,65 +75,45 @@ class TwitterClientManager:
                 # 检查代理IP应用是否正确
                 proxy_valid = await check_proxy(client, proxy_info[0], socks_url)
                 if not proxy_valid:
-                    logging.error(f"❌ 获取客户端失败: 代理验证未通过 ({email})")
-                    # 这里返回None可以避免账号不经过代理而使用
-                    raise AccountSuspended(f" 获取客户端失败: 代理验证未通过 ({email})")
-
+                    logging.error(f"❌ 获取客户端失败：代理验证未通过 ({email})")
+                    return None
                 cookie_file = self._get_cookie_path(email)
                 
-                # 存在Cookie时加载
+                # 尝试加载和验证Cookie
+                need_login = True
                 if os.path.exists(cookie_file):
                     client.load_cookies(cookie_file)
                     try:
                         # 验证Cookie有效性
-                        await client.get_user_by_screen_name("elon")
-                    # 处理httpcore和httpx的连接错误
-                    except (ProtocolError, httpx.ConnectError, httpcore.ConnectError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
-                        # 根据异常类型输出不同的错误信息
-                        if isinstance(e, ProtocolError):
-                            error_type = "代理协议"
-                            error_detail = f"代理连接失败(ProtocolError): {str(e)}"
-                        elif isinstance(e, (httpx.ConnectTimeout, httpcore.ConnectTimeout)):
-                            error_type = "连接超时"
-                            error_detail = f"连接超时({e.__class__.__name__}): {str(e)}"
-                        elif isinstance(e, (httpx.ConnectError, httpcore.ConnectError)):
-                            error_type = "网络连接"
-                            error_detail = f"网络连接失败({e.__class__.__name__}): {str(e)}"
-                        elif isinstance(e, (httpx.ReadTimeout, httpcore.ReadTimeout)):
-                            error_type = "读取超时"
-                            error_detail = f"读取超时({e.__class__.__name__}): {str(e)}" 
-                        else:
-                            error_type = "网络连接"
-                            error_detail = f"网络连接失败({e.__class__.__name__}): {str(e)}"
-                        if attempt < max_retries:
-                            delay = retry_delay * attempt
-                            logging.warning(f"🌐 获取客户端失败: {error_type}异常 ({email}) - {error_detail}, {attempt}/{max_retries} 次重试, 等待 {delay} 秒")
-                            await asyncio.sleep(delay)
-                            continue
+                        await client.get_user_by_screen_name(username)
+                        need_login = False
+                        logging.info(f'✅ Cookie验证成功 ({email})')
+                    except Exception:
+                        logging.warning(f'⚠️ Cookie失效，执行重新登录 ({email})')
+                        os.remove(cookie_file)
+
+                # 需要登录时执行登录流程
+                if need_login:
+                    try:
+                        await client.login(
+                            auth_info_1=username,
+                            auth_info_2=email, 
+                            password=password
+                        )
+                        logging.info(f'✅ 登录成功 ({email})')
                     except Exception as e:
-                        if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
-                            logging.warning(f'🚫 获取客户端失败: 账号【{email}】疑似封禁-AttributeError, 需要更换账号')
-                            raise AccountSuspended("账号疑似封禁") from e
-                        if "Forbidden" in str(e) or "403" in str(e):
-                            logging.warning(f'🚫 获取客户端失败: 账号【{email}】账号被禁止访问-403, 需要更换账号')
-                            raise AccountSuspended("账号被禁止访问") from e
-                        logging.warning(f'⚠️ Cookie失效, 执行重新登录 ({email})')
-                        if os.path.exists(cookie_file):
-                            os.remove(cookie_file)
-                try:
-                    await client.login(
-                        auth_info_1=username,
-                        auth_info_2=email,
-                        password=password
-                    )
-                    logging.info(f'✅ 登录成功 ({email})')
-                except Exception as e:
-                    logging.warning(f'🔒 登录失败 ({email})')
-                    raise e
+                        logging.error(f'❌ 登录失败 ({email}): {str(e)}')
+                        raise
                 
                 # 保存Cookie并返回初始化完成的客户端
                 client.save_cookies(cookie_file)
                 return client
             except Exception as e:
-                logging.error(f"❌ 获取客户端失败: 未知错误 ({email}): {str(e)}")
-                raise e
+                if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
+                    logging.warning(f'🚫 获取客户端失败：账号【{email}】疑似封禁-AttributeError，需要更换账号')
+                    return None
+                if "Forbidden" in str(e) or "403" in str(e):
+                    logging.warning(f'🚫 获取客户端失败：账号【{email}】账号被禁止访问-403，需要更换账号')
+                    return None
+                raise Exception(f"❌ 获取客户端失败：未知错误 ({email}): {str(e)}") from e
+
