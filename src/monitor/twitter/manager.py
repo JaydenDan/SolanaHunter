@@ -32,7 +32,7 @@ class SearchTaskManager:
         async with self.manager_lock:
             for task in self.search_tasks:
                 if await task.add_token(token):
-                    logging.info(f'✅ Token【{token["mint"]}】已添加到现有搜索任务')
+                    logging.info(f'✅ Token【{token["mint"]}】已添加到现有搜索任务, 监听时间: {token["detect_time"]}')
                     return
         # 无法添加到现有任务, 加入待处理队列
         async with self._pending_lock:

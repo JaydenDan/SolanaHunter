@@ -99,7 +99,7 @@ class MonitorCore:
             # 数据消息处理
             elif 'signature' in data:
                 logging.info(
-                    f'💰 监听到新的代币：Name=【{data["name"]}】 | Symbol=【{data["symbol"]}】 | CA=【{data["mint"]}】'
+                    f'💰 监听到新的代币：Name=【{data["name"]}】 | Symbol=【{data["symbol"]}】 | Mint=【{data["mint"]}】'
                 )
                 # 1. 把新代币CA丢给search_task_manager
                 data['detect_time'] = datetime.now()

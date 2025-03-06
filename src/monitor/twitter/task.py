@@ -99,12 +99,16 @@ class SearchTask:
                     self.mint_list.clear()
 
                     now = datetime.now()
-                    expired_mints = [
-                        t["mint"] for t in self.token_list
-                        if (now - t['token']["detect_time"]).total_seconds() > 600
-                    ]
-                    if expired_mints:
-                        logging.info(f'🆑 清理{len(expired_mints)}个超时CA')
+                    expired_mints = []
+                    for t in self.token_list:
+                        try:
+                            if (now - t["token"]["detect_time"]).total_seconds() > 600:
+                                expired_mints.append(t["mint"])
+                        except Exception as e:
+                            logging.error(f"❌ 清理超时CA失败: {str(e)}", exc_info=True)
+                            logging.error(f"❌ 当前token_list: {self.token_list}")
+                            logging.error(f"❌ 当前token: {t}")
+                            expired_mints = []
                     self.token_list = [
                         t for t in self.token_list
                         if t["mint"] not in expired_mints
@@ -125,10 +129,11 @@ class SearchTask:
                         await self.account_pool.release_account(self.account, True)
                         break
         except Exception as e:
-            logging.error(f'❌ 搜索任务运行错误: {str(e)}, 剩余Token已回滚到待处理队列', exc_info=True)
-            await self.on_error_callback(self.token_list)
+            logging.error(f'❌ 搜索任务运行错误: {str(e)} 剩余Token已回滚到待处理队列')
+            # 只传递原始token列表
+            original_tokens = [t["token"] for t in self.token_list]
+            await self.on_error_callback(original_tokens)
             await self.account_pool.release_account(self.account, False)
-            await self.on_error_callback(self.token_list)
         finally:
             await self.on_finish_callback(self, self.account.email)
 
