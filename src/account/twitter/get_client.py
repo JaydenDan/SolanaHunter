@@ -79,29 +79,31 @@ class TwitterClientManager:
                     return None
                 cookie_file = self._get_cookie_path(email)
                 
-                # 存在Cookie时加载
+                # 尝试加载和验证Cookie
+                need_login = True
                 if os.path.exists(cookie_file):
                     client.load_cookies(cookie_file)
                     try:
                         # 验证Cookie有效性
                         await client.get_user_by_screen_name(username)
+                        need_login = False
+                        logging.info(f'✅ Cookie验证成功 ({email})')
                     except Exception:
                         logging.warning(f'⚠️ Cookie失效，执行重新登录 ({email})')
-                        if os.path.exists(cookie_file):
-                            os.remove(cookie_file)
+                        os.remove(cookie_file)
 
+                # 需要登录时执行登录流程
+                if need_login:
+                    try:
                         await client.login(
                             auth_info_1=username,
-                            auth_info_2=email,
+                            auth_info_2=email, 
                             password=password
                         )
                         logging.info(f'✅ 登录成功 ({email})')
-                else:
-                    await client.login(
-                        auth_info_1=username,
-                        auth_info_2=email,
-                        password=password
-                    )
+                    except Exception as e:
+                        logging.error(f'❌ 登录失败 ({email}): {str(e)}')
+                        raise
                     logging.info(f'✅ 登录成功 ({email})')
                 
                 # 保存Cookie并返回初始化完成的客户端
@@ -137,9 +139,9 @@ class TwitterClientManager:
             except Exception as e:
                 if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
                     logging.warning(f'🚫 获取客户端失败：账号【{email}】疑似封禁-AttributeError，需要更换账号')
-                    raise AccountSuspended("账号疑似封禁") from e
+                    return None
                 if "Forbidden" in str(e) or "403" in str(e):
                     logging.warning(f'🚫 获取客户端失败：账号【{email}】账号被禁止访问-403，需要更换账号')
-                    raise AccountSuspended("账号被禁止访问") from e
+                    return None
                 raise Exception(f"❌ 获取客户端失败：未知错误 ({email}): {str(e)}") from e
 

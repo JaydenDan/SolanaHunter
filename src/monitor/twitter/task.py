@@ -18,9 +18,9 @@ from ...account.twitter import TwitterClientManager
 from ...account.twitter.get_account import AccountPool, TwitterAccount
 
 
-async def _search_words_maker(ca_list):
+async def _search_words_maker(mint_list):
     search_words = ''
-    for ca in ca_list:
+    for ca in mint_list:
         if search_words == '':
             search_words = search_words + ca
         else:
@@ -29,13 +29,13 @@ async def _search_words_maker(ca_list):
 
 
 class SearchTask:
-    def __init__(self, twitter_config: dict, on_finish_callback, account: TwitterAccount):
+    def __init__(self, twitter_config: dict, on_finish_callback, on_error_callback, account: TwitterAccount):
         self._task_counter = TaskCounter()
-        self.ca_list = []
+        self.mint_list = []
         self.token_list = []
         self.lock = asyncio.Lock()
         self.on_finish_callback = on_finish_callback
-
+        self.on_error_callback = on_error_callback
         if not Path(twitter_config['account_file_path']).exists():
             raise FileNotFoundError(f"Twitter账号文件路径无效: {twitter_config['account_file_path']}")
         self.account_file_path = twitter_config['account_file_path']
@@ -66,18 +66,17 @@ class SearchTask:
             raise e
         except Exception as e:
             # 其他异常直接抛出
-            raise Exception(f'❌ 初始化客户端失败，当前search_task将被放弃。') from e
+            raise Exception(f'❌ 初始化客户端失败, 当前search_task将被放弃。') from e
 
-    async def add_ca(self, token: dict):
+    async def add_token(self, token: dict):
         async with self.lock:
-            if len(self.ca_list) < 10:
+            if len(self.mint_list) < 10:
                 # 单独保存一份ca列表
-                self.ca_list.append(token["mint"])
+                self.mint_list.append(token["mint"])
                 # 保存一份代币信息列表
                 self.token_list.append({
                     "mint": token['mint'],
                     "token": token,
-                    "start_time": datetime.now()
                 })
                 return True
             return False
@@ -90,24 +89,24 @@ class SearchTask:
                     await self.initialize_client()
                     break
                 except AccountSuspended as e:
-                    logging.warning(f'🚫 账号初始化失败，尝试更换账号重新初始化')
+                    logging.warning(f'🚫 账号初始化失败, 尝试更换账号重新初始化')
                     success = await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=e.__traceback__)
                     if not success:
-                        raise Exception(f'❌ 初始化客户端失败，无法获取可用账号。') from e
+                        raise Exception(f'❌ 初始化客户端失败, 无法获取可用账号。') from e
                 except Exception as e:
-                    raise Exception(f'❌ 初始化客户端失败，当前search_task将被放弃。') from e
+                    raise Exception(f'❌ 初始化客户端失败, 当前search_task将被放弃。') from e
 
-            logging.info(f'🔛 搜索任务已启动，使用账号: {self.account.email}')
+            logging.info(f'🔛 搜索任务已启动, 使用账号: {self.account.email}')
             while True:
                 await asyncio.sleep(20)
                 async with self.lock:
-                    current_ca = self.ca_list.copy()
-                    self.ca_list.clear()
+                    current_ca = self.mint_list.copy()
+                    self.mint_list.clear()
 
                     now = datetime.now()
                     expired_mints = [
                         t["mint"] for t in self.token_list
-                        if (now - t["start_time"]).total_seconds() > 600
+                        if (now - t['token']["detect_time"]).total_seconds() > 600
                     ]
                     if expired_mints:
                         logging.info(f'🆑 清理{len(expired_mints)}个超时CA')
@@ -120,45 +119,46 @@ class SearchTask:
                         if ca not in expired_mints
                     ]
 
-                remaining_ca_list = []
+                remaining_mint_list = []
                 if current_ca:
-                    remaining_ca_list = await self._monitor_social_data(current_ca)
+                    remaining_mint_list = await self._monitor_social_data(current_ca)
 
                 async with self.lock:
-                    self.ca_list.extend(remaining_ca_list)
-                    if not self.ca_list and not self.token_list:
-                        logging.info(f'🏁 搜索任务已完成，释放账号: {self.account.email}')
+                    self.mint_list.extend(remaining_mint_list)
+                    if not self.mint_list and not self.token_list:
+                        logging.info(f'🏁 搜索任务已完成, 释放账号: {self.account.email}')
                         await self.account_pool.release_account(self.account, True)
                         break
         except Exception as e:
-            logging.error(f'❌ 搜索任务运行错误: {str(e)}', exc_info=True)
+            logging.error(f'❌ 搜索任务运行错误: {str(e)}, 剩余Token已回滚到待处理队列', exc_info=True)
+            await self.on_error_callback(self.token_list)
             await self.account_pool.release_account(self.account, False)
         finally:
             await self.on_finish_callback(self, self.account.email)
 
-    async def _monitor_social_data(self, current_ca_list: list):
-        """监控CA的推特帖子，然后对有帖子的CA进行操作"""
-        remaining_ca = current_ca_list.copy()
+    async def _monitor_social_data(self, current_mint_list: list):
+        """监控CA的推特帖子, 然后对有帖子的CA进行操作"""
+        remaining_mint = current_mint_list.copy()
         try:
-            if not current_ca_list:
+            if not current_mint_list:
                 return []
             # 生成搜索关键字
-            search_words = await _search_words_maker(current_ca_list)
+            search_words = await _search_words_maker(current_mint_list)
             # 搜索帖子
             tweets = await self._search_tweets(str(search_words), "Latest")
 
             if len(tweets) > 0:
-                cas_set = set(current_ca_list)
-                remaining_ca, self.token_list = await engine.notify_process(
+                cas_set = set(current_mint_list)
+                remaining_mint, self.token_list = await engine.notify_process(
                     tweets=tweets,
                     cas_set=cas_set,
                     token_list=self.token_list,
-                    remaining_ca=remaining_ca
+                    remaining_mint=remaining_mint
                 )
-            return remaining_ca
+            return remaining_mint
         except Exception as e:
             logging.error(f"❌ 社交媒体数据获取失败: {str(e)}", exc_info=True)
-            return remaining_ca
+            return remaining_mint
 
     async def _search_tweets(self, query: str, product: str) -> list:
         """
@@ -259,10 +259,10 @@ class SearchTask:
             if current_task:
                 new_name = await self._task_counter.get_name(self.account.email.split('@')[0])
                 current_task.set_name(new_name)
-                logging.info(f'✅ 账号更换成功，新账号: {self.account.email}，协程名称更新为: {new_name}')
+                logging.info(f'✅ 账号更换成功, 新账号: {self.account.email}, 协程名称更新为: {new_name}')
             return True
         except AccountSuspended as e:
-            logging.warning(f'🚫 账号【{self.account.email}】换号失败，尝试继续换号')
+            logging.warning(f'🚫 账号【{self.account.email}】换号失败, 尝试继续换号')
             await self._reinitialize_client(error_info=str(e.__class__.__name__), stack_trace=str(e.__traceback__))
             return False
         except Exception as e:

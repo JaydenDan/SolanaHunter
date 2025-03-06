@@ -1,9 +1,12 @@
 # src/monitor/core.py（核心协调者）
 import asyncio
+from datetime import datetime
 import json
 import logging
 from pathlib import Path
 from watchdog.observers import Observer
+
+from src.account.twitter.get_account import AccountPool
 from .blockchain.new_token_listener import NewTokenListener
 from .twitter.manager import SearchTaskManager as TwitterSearchTaskManager
 from ..notifier.discord.bot import DiscordBot
@@ -51,7 +54,12 @@ class MonitorCore:
 
         # 第一步：立即停止区块链监听
         self.listener.stop()
-        logging.info("✅ 区块链监控已停止")
+        logging.info("🛑 区块链监控已停止")
+
+        # 第二步: 关闭账号池辅助协程
+        account_pool = AccountPool("----") # 单例模式，随便传入一个参数获取实例
+        await account_pool.close()
+        logging.info("🛑 账号池辅助协程已关闭")
 
         # 第二步 等待现有任务完成
         while True:
@@ -68,11 +76,11 @@ class MonitorCore:
         logging.info("🛑 开始释放系统资源...")
         bot = DiscordBot()
         await bot.close()
-        logging.info(f"🟢 Discord Bot已关闭")
+        logging.info(f"🛑 Discord Bot已关闭")
         # await self._stop_file_watcher()
         # await self.task_manager.cleanup()
         self._running = False
-        logging.info("✅ 系统完全关闭")
+        logging.info("✅ 系统已经正确关闭")
 
     async def _handle_new_token(self, message: str):
         """新代币事件处理入口"""
@@ -89,6 +97,7 @@ class MonitorCore:
                     f'💰 监听到新的代币：Name=【{data["name"]}】 | Symbol=【{data["symbol"]}】 | CA=【{data["mint"]}】'
                 )
                 # 1. 把新代币CA丢给search_task_manager
+                data['detect_time'] = datetime.now()
                 await self.task_manager.add_new_token(data)
             else:
                 logging.warning("⚠️ 未知消息格式: %s", data)
