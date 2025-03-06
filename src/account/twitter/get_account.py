@@ -430,36 +430,34 @@ class AccountPool:
 
     async def close(self):
         """关闭账号池，停止所有协程任务"""
-        logging.info("🛑 开始关闭Twitter账号池...")
+        logging.info("🛑 开始关闭Twitter账号池辅助任务...")
         
         # 设置运行标志为False，通知协程循环停止
         self._auxiliary_coroutine_running = False
         
         # 取消维护协程任务
         if self._maintenance_task and not self._maintenance_task.done():
-            logging.info("🛑 正在关闭账号维护协程...")
             self._maintenance_task.cancel()
             try:
                 await asyncio.wait_for(self._maintenance_task, timeout=5.0)
-                logging.info("✅ 账号维护协程已关闭")
+                logging.info("🛑 账号维护协程已关闭")
             except asyncio.TimeoutError:
                 logging.warning("⚠️ 关闭账号维护协程超时")
             except asyncio.CancelledError:
-                logging.info("✅ 账号维护协程已取消")
+                logging.info("🛑 账号维护协程已取消")
             except Exception as e:
                 logging.error(f"❌ 关闭账号维护协程时发生错误: {str(e)}", exc_info=True)
         
         # 取消Excel检查协程任务
         if self._excel_check_task and not self._excel_check_task.done():
-            logging.info("🛑 正在关闭Excel更新检查协程...")
             self._excel_check_task.cancel()
             try:
                 await asyncio.wait_for(self._excel_check_task, timeout=5.0)
-                logging.info("✅ Excel更新检查协程已关闭")
+                logging.info("🛑 Excel更新检查协程已关闭")
             except asyncio.TimeoutError:
                 logging.warning("⚠️ 关闭Excel更新检查协程超时")
             except asyncio.CancelledError:
-                logging.info("✅ Excel更新检查协程已取消")
+                logging.info("🛑 Excel更新检查协程已取消")
             except Exception as e:
                 logging.error(f"❌ 关闭Excel更新检查协程时发生错误: {str(e)}", exc_info=True)
         
