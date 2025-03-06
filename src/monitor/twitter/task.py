@@ -168,67 +168,83 @@ class SearchTask:
         :param product: 搜索模式
         :return: 推文列表
         """
-        try:
-            ALLOWED_PRODUCTS = {'Top', 'Latest', 'Media'}
-            validated_product = product if product in ALLOWED_PRODUCTS else "Latest"
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                ALLOWED_PRODUCTS = {'Top', 'Latest', 'Media'}
+                validated_product = product if product in ALLOWED_PRODUCTS else "Latest"
 
-            search_result = await self.client.search_tweet(
-                query, validated_product,
-            )
+                search_result = await self.client.search_tweet(
+                    query, validated_product,
+                )
 
-            return [
-                {
-                    "id": tweet.id,
-                    "text": tweet.text,
-                    "created_at": tweet.created_at_datetime + timedelta(hours=8),
-                    "user": {
-                        "name": tweet.user.name,
-                        "screen_name": tweet.user.screen_name,
-                        "description": tweet.user.description,
-                        "verified": tweet.user.verified,
-                        "is_blue_verified": tweet.user.is_blue_verified,
-                        "display_url": tweet.user.urls[0]['display_url'] if tweet.user.urls and tweet.user.urls[0].get(
-                            'display_url') else '----',
-                        "expanded_url": tweet.user.urls[0]['expanded_url'] if tweet.user.urls and tweet.user.urls[
-                            0].get('expanded_url') else '----',
-                        "following_count": tweet.user.following_count,
-                        "favourites_count": tweet.user.favourites_count,
-                        "followers_count": tweet.user.followers_count,
-                        "fast_followers_count": tweet.user.fast_followers_count,
-                        "normal_followers_count": tweet.user.normal_followers_count
-                    },
-                    "metrics": {
-                        "likes": tweet.favorite_count,
-                        "retweets": tweet.retweet_count,
-                        "replies": tweet.reply_count,
-                        "view_count": tweet.view_count if tweet.view_count is not None else 0
+                return [
+                    {
+                        "id": tweet.id,
+                        "text": tweet.text,
+                        "created_at": tweet.created_at_datetime + timedelta(hours=8),
+                        "user": {
+                            "name": tweet.user.name,
+                            "screen_name": tweet.user.screen_name,
+                            "description": tweet.user.description,
+                            "verified": tweet.user.verified,
+                            "is_blue_verified": tweet.user.is_blue_verified,
+                            "display_url": tweet.user.urls[0]['display_url'] if tweet.user.urls and tweet.user.urls[0].get(
+                                'display_url') else '----',
+                            "expanded_url": tweet.user.urls[0]['expanded_url'] if tweet.user.urls and tweet.user.urls[
+                                0].get('expanded_url') else '----',
+                            "following_count": tweet.user.following_count,
+                            "favourites_count": tweet.user.favourites_count,
+                            "followers_count": tweet.user.followers_count,
+                            "fast_followers_count": tweet.user.fast_followers_count,
+                            "normal_followers_count": tweet.user.normal_followers_count
+                        },
+                        "metrics": {
+                            "likes": tweet.favorite_count,
+                            "retweets": tweet.retweet_count,
+                            "replies": tweet.reply_count,
+                            "view_count": tweet.view_count if tweet.view_count is not None else 0
+                        }
                     }
-                }
-                for tweet in search_result
-            ]
-        except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
-            # 不同类型错误输出不同日志
-            if isinstance(e, (httpx.ConnectError, httpcore.ConnectError)):
-                logging.warning(f'🌐 网络连接失败({e.__class__.__name__}): {str(e)}')
-            elif isinstance(e, ProtocolError):
-                logging.warning(f'🌐 代理连接失败(ProtocolError): {str(e)}')
-            elif isinstance(e, (httpcore.ConnectTimeout, httpx.ConnectTimeout)):
-                logging.warning(f'🌐 连接超时({e.__class__.__name__}): {str(e)}')
-            elif isinstance(e, (httpx.ReadTimeout, httpcore.ReadTimeout)):
-                logging.warning(f'🌐 读取超时({e.__class__.__name__}): {str(e)}')
-            return []
-        except AccountSuspended as e:
-            if 'Rate limit exceeded' in str(e):
-                logging.warning(f'🚫 账号【{self.account.email}】达到限流-429')
-                await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
-        except Exception as e:
-            if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
-                logging.warning(f'🚫 账号【{self.account.email}】疑似封禁-AttributeError')
-                await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
-            if "Forbidden" in str(e) or "403" in str(e):
-                logging.warning(f'🚫 账号【{self.account.email}】账号被禁止访问-403')
-                await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
-            logging.error(f"❌ 搜索失败: {str(e)}", exc_info=True)
+                    for tweet in search_result
+                ]
+            except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
+                retry_count += 1
+                # 计算等待时间（指数退避策略）
+                base_time = 1  # 基础等待时间（秒）
+                wait_time = base_time * (2 ** retry_count)  # 2^1=2, 2^2=4, 2^3=8
+                
+                # 不同类型错误输出不同日志
+                if isinstance(e, (httpx.ConnectError, httpcore.ConnectError)):
+                    logging.warning(f'🌐 网络连接失败({e.__class__.__name__}): {str(e)}, 重试次数: {retry_count}/{max_retries}, {wait_time}秒后重试')
+                elif isinstance(e, ProtocolError):
+                    logging.warning(f'🌐 代理连接失败(ProtocolError): {str(e)}, 重试次数: {retry_count}/{max_retries}, {wait_time}秒后重试')
+                elif isinstance(e, (httpcore.ConnectTimeout, httpx.ConnectTimeout)):
+                    logging.warning(f'🌐 连接超时({e.__class__.__name__}): {str(e)}, 重试次数: {retry_count}/{max_retries}, {wait_time}秒后重试')
+                elif isinstance(e, (httpx.ReadTimeout, httpcore.ReadTimeout)):
+                    logging.warning(f'🌐 读取超时({e.__class__.__name__}): {str(e)}, 重试次数: {retry_count}/{max_retries}, {wait_time}秒后重试')
+                
+                if retry_count >= max_retries:
+                    logging.error(f'🔄 已达到最大重试次数({max_retries})，搜索推文失败')
+                    return []
+            
+                await asyncio.sleep(wait_time)
+            except AccountSuspended as e:
+                if 'Rate limit exceeded' in str(e):
+                    logging.warning(f'🚫 账号【{self.account.email}】达到限流-429')
+                    await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
+                return []
+            except Exception as e:
+                if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
+                    logging.warning(f'🚫 账号【{self.account.email}】疑似封禁-AttributeError')
+                    await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
+                elif "Forbidden" in str(e) or "403" in str(e):
+                    logging.warning(f'🚫 账号【{self.account.email}】账号被禁止访问-403')
+                    await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
+                logging.error(f"❌ 搜索失败: {str(e)}", exc_info=True)
+                return []
         return []
 
     async def _reinitialize_client(self, error_name: str, error_info: str):
