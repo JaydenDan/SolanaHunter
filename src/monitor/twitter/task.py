@@ -280,9 +280,6 @@ class SearchTask:
                     current_task.set_name(new_name)
                     logging.info(f'✅ 账号更换成功, 新账号: {self.account.email}, 协程名称更新为: {new_name}, 原协程名称: {original_name}')
                 return True
-        except AccountSuspended as e:
+        except Exception as e:
             logging.warning(f'🚫 账号【{self.account.email}】换号失败, 尝试继续换号')
             return await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e.__traceback__))
-        except Exception as e:
-            logging.error(f'❌ 更换账号失败: {str(e)}')
-            return False

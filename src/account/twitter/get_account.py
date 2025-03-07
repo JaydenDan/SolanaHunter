@@ -465,5 +465,5 @@ class AccountPool:
         self._maintenance_task = None
         self._excel_check_task = None
         
-        logging.info("✅ Twitter账号池辅助协程已成功关闭")
+        logging.info("🛑 Twitter账号池辅助协程已成功关闭")
     
