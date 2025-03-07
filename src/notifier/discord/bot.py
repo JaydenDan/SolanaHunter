@@ -27,6 +27,7 @@ class DiscordBot:
         self.bot: Optional[commands.Bot] = None
         self._task: Optional[asyncio.Task] = None
         self._initialized = False
+        self._interaction_handler_registered = False
 
     async def init_bot(self) -> None:
         """异步初始化机器人（2.x规范）"""
@@ -68,6 +69,29 @@ class DiscordBot:
         @self.bot.event
         async def on_ready():
             logging.info(f"✅ Discord机器人已就绪")
+            
+        # 添加交互事件处理器（只注册一次）
+        if not self._interaction_handler_registered:
+            @self.bot.event
+            async def on_interaction(interaction: discord.Interaction):
+                if interaction.type == discord.InteractionType.component:
+                    custom_id = interaction.data.get("custom_id", "")
+                    # 处理查看交易发起人完整地址
+                    if custom_id.startswith("view_address_"):
+                        address = custom_id.replace("view_address_", "")
+                        # 回复一个临时消息（只有点击的用户可见）
+                        await interaction.response.send_message(
+                            f"{address}", 
+                            ephemeral=True  # 只有交互用户可见
+                        )
+                    # 处理复制代币地址
+                    elif custom_id.startswith("copy_token_"):
+                        token_address = custom_id.replace("copy_token_", "")
+                        await interaction.response.send_message(
+                            f"{token_address}", 
+                            ephemeral=True  # 只有交互用户可见
+                        )
+            self._interaction_handler_registered = True
 
         # 安全启动流程
         try:
@@ -98,7 +122,9 @@ class DiscordBot:
             self,
             channel_id: int,
             message: Optional[str] = None,
-            embed: Optional[Union[discord.Embed, List[discord.Embed]]] = None
+            embed: Optional[Union[discord.Embed, List[discord.Embed]]] = None,
+            trader_address: Optional[str] = None,
+            mint_address: Optional[str] = None
     ):
         """发送消息（最多重试3次）"""
         if not self.bot:
@@ -116,12 +142,37 @@ class DiscordBot:
             if embed:
                 embeds = [embed] if isinstance(embed, discord.Embed) else embed
             embeds = embeds[:10]  # 强制截断
+            
+            # 创建交互视图
+            view = None
+            if trader_address or mint_address:
+                view = discord.ui.View(timeout=None)
+                
+                # 添加代币地址复制按钮（如果提供了代币地址）
+                if mint_address:
+                    view.add_item(
+                        discord.ui.Button(
+                            label="复制代币地址",
+                            style=discord.ButtonStyle.primary,  # 使用不同样式
+                            custom_id=f"copy_token_{mint_address}"
+                        )
+                    )
+                
+                # 添加查看发起地址按钮（如果提供了交易者地址）
+                if trader_address:
+                    view.add_item(
+                        discord.ui.Button(
+                            label="查看完整发起地址",
+                            style=discord.ButtonStyle.secondary,
+                            custom_id=f"view_address_{trader_address}"
+                        )
+                    )
 
             # 重试逻辑（仅包裹发送步骤）
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    await channel.send(content=content, embeds=embeds)
+                    await channel.send(content=content, embeds=embeds, view=view)
                     break  # 发送成功则退出循环
                 except ConnectionResetError as e:
                     if attempt < max_retries - 1:

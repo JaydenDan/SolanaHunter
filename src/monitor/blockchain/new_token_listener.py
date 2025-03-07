@@ -43,7 +43,7 @@ class NewTokenListener:
                         if not self._running:
                             return
                         if self._callback:
-                            # 监听到新代币立即创建异步任务，去处理新代币
+                            # 监听到新代币立即创建异步搜索任务，去处理新代币
                             task_name = await self._task_counter.get_name('Token_No.')
                             asyncio.create_task(
                                 self._callback(message),

@@ -150,7 +150,7 @@ class SearchTask:
 
             if len(tweets) > 0:
                 mint_set = set(current_mint_list)
-                remaining_mint, self.token_list = await engine.notify_process(
+                remaining_mint, self.token_list = await engine.notify_process_with_twitter(
                     tweets=tweets,
                     mint_set=mint_set,
                     token_list=self.token_list,
@@ -191,10 +191,8 @@ class SearchTask:
                             "description": tweet.user.description,
                             "verified": tweet.user.verified,
                             "is_blue_verified": tweet.user.is_blue_verified,
-                            "display_url": tweet.user.urls[0]['display_url'] if tweet.user.urls and tweet.user.urls[0].get(
-                                'display_url') else '----',
-                            "expanded_url": tweet.user.urls[0]['expanded_url'] if tweet.user.urls and tweet.user.urls[
-                                0].get('expanded_url') else '----',
+                            "display_url": tweet.user.urls[0]['display_url'] if tweet.user.urls and tweet.user.urls[0].get('display_url') else '----',
+                            "expanded_url": tweet.user.urls[0]['expanded_url'] if tweet.user.urls and tweet.user.urls[0].get('expanded_url') else '----',
                             "following_count": tweet.user.following_count,
                             "favourites_count": tweet.user.favourites_count,
                             "followers_count": tweet.user.followers_count,
@@ -231,10 +229,14 @@ class SearchTask:
                     return []
             
                 await asyncio.sleep(wait_time)
-            except (AccountSuspended, TooManyRequests) as e:
-                if 'Rate limit exceeded' in str(e):
+            except (AccountSuspended, TooManyRequests, Unauthorized) as e:
+                if isinstance(e, TooManyRequests):
                     logging.warning(f'🚫 账号【{self.account.email}】达到限流-429')
-                    await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
+                elif isinstance(e, AccountSuspended):
+                    logging.warning(f'🚫 账号【{self.account.email}】被暂停使用')
+                elif isinstance(e, Unauthorized):
+                    logging.warning(f'🚫 账号【{self.account.email}】未授权-401')
+                await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
                 return []
             except Exception as e:
                 if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):

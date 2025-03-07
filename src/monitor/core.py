@@ -4,10 +4,8 @@ from datetime import datetime
 import json
 import logging
 from pathlib import Path
-from watchdog.observers import Observer
-
-from src.account.twitter.get_account import AccountPool
 from .blockchain.new_token_listener import NewTokenListener
+from .rules import engine
 from .twitter.manager import SearchTaskManager as TwitterSearchTaskManager
 from ..notifier.discord.bot import DiscordBot
 from ..utils import TaskCounter
@@ -101,6 +99,12 @@ class MonitorCore:
                 logging.info(
                     f'💰 监听到新的代币：Name=【{data["name"]}】 | Symbol=【{data["symbol"]}】 | Mint=【{data["mint"]}】'
                 )
+                # 只有当 solAmount 为 0 时才创建 SaL 任务
+                if float(data.get('solAmount', 1)) == 0:
+                    asyncio.create_task(
+                        engine.notify_process_without_twitter(data),
+                        name='SaL_' + data['symbol']
+                    )
                 # 1. 把新代币CA丢给search_task_manager
                 data['detect_time'] = datetime.now()
                 await self.task_manager.add_new_token(data)

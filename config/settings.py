@@ -27,13 +27,15 @@ DISCORD = {
     "token": "MTM0NTI0NTkyMTk0ODIwNTA3Nw.GC19fL.sWOdoZcQ1h0Z395mBjoI2r7hGDU-yek0Y6IPjk",
     "proxy": "http://localhost:7890",  # 代理地址
     "channel": {
+        "test_channel": 1345764680274149386,
         "all_twitter": 1345252024413065322,
         "founder_twitter": 1345252024413065323,
         "1000~3000_fans": 1345829917472063609,
         "3000~5000_fans": 1345830387854741646,
         "5000~10000_fans": 1345831194050302033,
         "10000+_fans": 1345831926191358004,
-        "system_channel": 1346201432814129194
+        "system_channel": 1346201432814129194,
+        "start_as_launch_without_twitter": 1347601435742965922
     },
     
 }
