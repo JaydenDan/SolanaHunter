@@ -76,16 +76,8 @@ class DiscordBot:
             async def on_interaction(interaction: discord.Interaction):
                 if interaction.type == discord.InteractionType.component:
                     custom_id = interaction.data.get("custom_id", "")
-                    # 处理查看交易发起人完整地址
-                    if custom_id.startswith("view_address_"):
-                        address = custom_id.replace("view_address_", "")
-                        # 回复一个临时消息（只有点击的用户可见）
-                        await interaction.response.send_message(
-                            f"{address}", 
-                            ephemeral=True  # 只有交互用户可见
-                        )
                     # 处理复制代币地址
-                    elif custom_id.startswith("copy_token_"):
+                    if custom_id.startswith("copy_token_"):
                         token_address = custom_id.replace("copy_token_", "")
                         await interaction.response.send_message(
                             f"{token_address}", 
@@ -123,7 +115,6 @@ class DiscordBot:
             channel_id: int,
             message: Optional[str] = None,
             embed: Optional[Union[discord.Embed, List[discord.Embed]]] = None,
-            trader_address: Optional[str] = None,
             mint_address: Optional[str] = None
     ):
         """发送消息（最多重试3次）"""
@@ -145,28 +136,19 @@ class DiscordBot:
             
             # 创建交互视图
             view = None
-            if trader_address or mint_address:
+            if mint_address:
                 view = discord.ui.View(timeout=None)
                 
-                # 添加代币地址复制按钮（如果提供了代币地址）
-                if mint_address:
-                    view.add_item(
-                        discord.ui.Button(
-                            label="复制代币地址",
-                            style=discord.ButtonStyle.primary,  # 使用不同样式
-                            custom_id=f"copy_token_{mint_address}"
-                        )
+                # 添加代币地址复制按钮
+                view.add_item(
+                    discord.ui.Button(
+                        label="复制代币地址",
+                        style=discord.ButtonStyle.primary,  # 使用不同样式
+                        custom_id=f"copy_token_{mint_address}"
                     )
+                )
                 
-                # 添加查看发起地址按钮（如果提供了交易者地址）
-                if trader_address:
-                    view.add_item(
-                        discord.ui.Button(
-                            label="部署代币钱包地址",
-                            style=discord.ButtonStyle.secondary,
-                            custom_id=f"view_address_{trader_address}"
-                        )
-                    )
+                # 不再添加查看发起地址按钮
 
             # 重试逻辑（仅包裹发送步骤）
             max_retries = 3

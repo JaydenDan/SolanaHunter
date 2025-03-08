@@ -84,8 +84,6 @@ async def _start_notify(context):
         # Discord
         bot = DiscordBot()
         embed = _create_embed(context)
-        # 获取交易者地址用于按钮
-        trader_address = context["traderPublicKey"]
         # 获取代币地址
         mint_address = context["mint"]
 
@@ -93,31 +91,31 @@ async def _start_notify(context):
             # 判断是否创始人发币
             if _founder_judge(context):
                 logging.info(f"🔥 检测到创始人发型代币, 准备通知:  CA【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
-                await bot.send_message(channel_id=settings.DISCORD['channel']['founder_twitter'], embed=embed, trader_address=trader_address, mint_address=mint_address)
+                await bot.send_message(channel_id=settings.DISCORD['channel']['founder_twitter'], embed=embed, mint_address=mint_address)
             else:
                 followers_count = context['social']['user']['followers_count']
                 if 0 <= followers_count < 1000:
                     logging.info(f"🔥 当前代币发推账户粉丝数 < 一千, 准备通知:  CA【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
-                    await bot.send_message(channel_id=settings.DISCORD['channel']['all_twitter'], embed=embed, trader_address=trader_address, mint_address=mint_address)
+                    await bot.send_message(channel_id=settings.DISCORD['channel']['all_twitter'], embed=embed, mint_address=mint_address)
 
                 elif 1000 <= followers_count < 3000:
                     logging.info(f"🔥 当前代币发推账户粉丝数 > 一千, 准备通知:  CA【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
-                    await bot.send_message(channel_id=settings.DISCORD['channel']['1000~3000_fans'], embed=embed, trader_address=trader_address, mint_address=mint_address)
+                    await bot.send_message(channel_id=settings.DISCORD['channel']['1000~3000_fans'], embed=embed, mint_address=mint_address)
 
                 elif 3000 <= followers_count < 5000:
                     logging.info(f"🔥 当前代币发推账户粉丝数 > 三千, 准备通知: 【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
-                    await bot.send_message(channel_id=settings.DISCORD['channel']['3000~5000_fans'], embed=embed, trader_address=trader_address, mint_address=mint_address)
+                    await bot.send_message(channel_id=settings.DISCORD['channel']['3000~5000_fans'], embed=embed, mint_address=mint_address)
 
                 elif 5000 <= followers_count < 10000:
                     logging.info(f"🔥 当前代币发推账户粉丝数 > 五千, 准备通知: 【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
 
-                    await bot.send_message(channel_id=settings.DISCORD['channel']['5000~10000_fans'], embed=embed, trader_address=trader_address, mint_address=mint_address)
+                    await bot.send_message(channel_id=settings.DISCORD['channel']['5000~10000_fans'], embed=embed, mint_address=mint_address)
                 elif 10000 <= followers_count:
                     logging.info(f"🔥 当前代币发推账户粉丝数 > 一万, 准备通知: 【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
-                    await bot.send_message(channel_id=settings.DISCORD['channel']['10000+_fans'], embed=embed, trader_address=trader_address, mint_address=mint_address)
+                    await bot.send_message(channel_id=settings.DISCORD['channel']['10000+_fans'], embed=embed, mint_address=mint_address)
         else:
             logging.info(f"🔥 当前代币上线就发射, 准备通知: 【{context['mint']}】, Token_name:【{context['name']}】, Token_symbol:【{context['symbol']}】")
-            await bot.send_message(channel_id=settings.DISCORD['channel']['start_as_launch_without_twitter'], embed=embed, trader_address=trader_address, mint_address=mint_address)
+            await bot.send_message(channel_id=settings.DISCORD['channel']['start_as_launch_without_twitter'], embed=embed, mint_address=mint_address)
 
     except Exception as e:
         logging.error(f"Discord通知处理流水线异常: {context['address']} | {str(e)}")
@@ -128,7 +126,7 @@ def _create_embed(context: dict) -> discord.Embed:
     embed = discord.Embed(
         title=f"📊 {context['symbol']} 交易动态 | {context['txType'].upper()}", #  `{context['marketCapSol']/context['initialBuy']} SOL`
         color=discord.Color.green() if context["txType"] == "create" else discord.Color.red(),
-        description=f"🈺 代币开盘发布时间: {context['detect_time'].strftime('%Y-%m-%d %H:%M:%S UTC+8')}\n  "
+        description=f"🈺 代币开盘时间: {context['detect_time'].strftime('%Y-%m-%d %H:%M:%S UTC+8')}\n  "
                     f"[🔍 点击直达OKX](https://www.okx.com/zh-hans/web3/detail/501/{context['mint']}) | [🔍 点击直达GMGN](https://gmgn.ai/sol/token/{context['mint']})\n"
                     f"```fix\n{context['mint']}\n```",
         timestamp=datetime.now()  # 自动添加时间戳
@@ -139,16 +137,12 @@ def _create_embed(context: dict) -> discord.Embed:
         icon_url="https://pump.fun/_next/image?url=%2Flogo.png&w=64&q=75"
     )
 
-    # 截断地址，只保留前5个和后5个字符
-    full_trader_address = context['traderPublicKey']
-    short_trader_address = f"{full_trader_address[:5]}***{full_trader_address[-5:]}"
-    
     # 创建view和按钮的部分将在send_message中完成
 
     embed.add_field(name="", value="", inline=False)
     embed.add_field(
         name="\n💰 资金流动",
-        value=f"​启动认购: `{context['initialBuy']:.2f} {context['symbol']}`\n​实存SOL: `{context['solAmount']:.2f} SOL`\n发起地址: `{short_trader_address}`",
+        value=f"​启动认购: `{context['initialBuy']:.2f} {context['symbol']}`\n​实存SOL: `{context['solAmount']:.2f} SOL`",
         inline=True
     )
     embed.add_field(
@@ -158,22 +152,36 @@ def _create_embed(context: dict) -> discord.Embed:
     )
     
     # 计算SOL差值并添加警告信息
-    sol_diff = context['solAmount'] - context['vSolInBondingCurve']
+    sol_diff = context['vSolInBondingCurve'] - context['solAmount']
     diff_percentage = (sol_diff / context['solAmount']) * 100 if context['solAmount'] > 0 else 0
+
+    # 对 diff_percentage 进行分级评分
+    # 评分规则：左侧可以等于，右侧不能等于
+    risk_score = 0
+    if diff_percentage >= 100:
+        risk_score = 0
+    elif 70 <= diff_percentage < 100:
+        risk_score = 1
+    elif 50 <= diff_percentage < 70:
+        risk_score = 2
+    elif 30 <= diff_percentage < 50:
+        risk_score = 3
+    elif 10 <= diff_percentage < 30:
+        risk_score = 4
+    else:  # diff_percentage < 10
+        risk_score = 5
     
-    # 只在差值明显过大时提示风险
-    # if diff_percentage > 1:  # 差额超过1%才视为明显异常
-    #     warning_emoji = "⚠️"
-    #     warning_message = f"差额: `{sol_diff:.2f} SOL` (`{diff_percentage:.2f}%`)\n提示: 差额指盘子SOL存量与发币时投入的SOL之间的差值\n**注意**: 差额过大, 明显高于正常协议费用, 请评估风险"
-    # else:
-    #     warning_emoji = "✅"
-    #     warning_message = f"差额: `{sol_diff:.2f} SOL` (`{diff_percentage:.2f}%`)\n提示: 差额指盘子SOL存量与发币时投入的SOL之间的差值\n差额正常, 包含正常的协议费用"
+    # 使用星星表示评分（固定5个星星位置，几分填几个实心星）
+    stars = "⭐" * risk_score + "☆" * (5 - risk_score)
     
-    # embed.add_field(
-    #     name=f"\n{warning_emoji} SOL资金差额",
-    #     value=warning_message,
-    #     inline=False
-    # )
+    # 添加风险评分到 embed, 
+    # 绑定曲线会+30vSOL，投入SOL越多，绑定曲线加的vSOL占比越低
+    # 此时可考虑入手3分钟或者盈利30%～50%离场，入手100RMB左右即可
+    embed.add_field(
+        name=f"\n🏷️ 入手评分: {stars}",
+        value=f"提示: 1⭐️+此时可考虑入手3分钟或者盈利30%~50%离场, 入手100RMB左右即可\n",
+        inline=False
+    )
 
     embed.add_field(name="", value="", inline=False)
     embed.add_field(
@@ -187,7 +195,7 @@ def _create_embed(context: dict) -> discord.Embed:
         inline=False
     )
 
-    # 用户信息
+    # 处理社交媒体信息
     social = context.get("social")
     if social is not None:
         # 互动数据

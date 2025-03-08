@@ -99,8 +99,8 @@ class MonitorCore:
                 logging.info(
                     f'💰 监听到新的代币：Name=【{data["name"]}】 | Symbol=【{data["symbol"]}】 | Mint=【{data["mint"]}】'
                 )
-                # 只有当 solAmount 为 0 时才创建 SaL 任务
-                if float(data.get('solAmount', 1)) == 0:
+                # 只有当 solAmount 为 0 时才创建 SaL 任务, 并且 initialBuy 大于 0
+                if float(data.get('solAmount', 1)) == 0 and float(data.get('initialBuy', 1)) > 0:
                     asyncio.create_task(
                         engine.notify_process_without_twitter(data),
                         name='SaL_' + data['symbol']
