@@ -1,13 +1,11 @@
 import asyncio
 import logging
 import os
-from typing import Any, Coroutine
 
 import httpcore
 import httpx
 from socksio import ProtocolError
 from twikit.client.client import Client
-from twikit import AccountSuspended
 
 
 async def check_proxy(client: Client, proxy_ip, socks_url):

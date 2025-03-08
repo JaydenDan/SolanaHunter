@@ -7,16 +7,12 @@ import os
 import time
 
 import discord
-import httpcore
-import httpx
 import pandas as pd
 from dataclasses import dataclass
 
-from socksio import ProtocolError
 from config import settings
 from src.notifier.discord.bot import DiscordBot
 from src.account.twitter.get_client import TwitterClientManager
-from twikit import AccountSuspended
 
 
 @dataclass
@@ -407,6 +403,7 @@ class AccountPool:
         :param account: Twitter账号对象
         :return: 测试是否通过
         """
+        client = None
         try:
             # 获取客户端并尝试登录
             client = await self.client_manager.get_client(
@@ -427,6 +424,14 @@ class AccountPool:
         except Exception as e:
             logging.warning(f"❌ 账号【{account.email}】搜索测试失败: {str(e)}")
             return False
+        finally:
+            # 关闭客户端内部的httpx连接
+            if client is not None:
+                try:
+                    await client.http.aclose()
+                    logging.debug(f"🧹 账号【{account.email}】测试完毕，httpx连接已关闭")
+                except Exception as e:
+                    logging.warning(f"⚠️ 关闭httpx连接时出错: {str(e)}")
 
     async def close(self):
         """关闭账号池，停止所有协程任务"""

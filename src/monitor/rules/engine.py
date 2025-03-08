@@ -126,10 +126,10 @@ async def _start_notify(context):
 def _create_embed(context: dict) -> discord.Embed:
     """生成交易信息Embed（保持你的原始颜色逻辑）"""
     embed = discord.Embed(
-        title=f"📊 {context['symbol']} 交易动态 | {context['txType'].upper()} | 当前单价: `{context['marketCapSol']/context['initialBuy']} SOL`",
+        title=f"📊 {context['symbol']} 交易动态 | {context['txType'].upper()}", #  `{context['marketCapSol']/context['initialBuy']} SOL`
         color=discord.Color.green() if context["txType"] == "create" else discord.Color.red(),
-        description=f"[🔍 点击直达OKX](https://www.okx.com/zh-hans/web3/detail/501/{context['mint']})\n"
-                    f"[🔍 点击直达GMGN](https://gmgn.ai/sol/token/{context['mint']})\n"
+        description=f"🈺 代币开盘发布时间: {context['detect_time'].strftime('%Y-%m-%d %H:%M:%S UTC+8')}\n  "
+                    f"[🔍 点击直达OKX](https://www.okx.com/zh-hans/web3/detail/501/{context['mint']}) | [🔍 点击直达GMGN](https://gmgn.ai/sol/token/{context['mint']})\n"
                     f"```fix\n{context['mint']}\n```",
         timestamp=datetime.now()  # 自动添加时间戳
     )
@@ -148,12 +148,12 @@ def _create_embed(context: dict) -> discord.Embed:
     embed.add_field(name="", value="", inline=False)
     embed.add_field(
         name="\n💰 资金流动",
-        value=f"发币数量: `{context['initialBuy']:.2f} {context['symbol']}`\n投入流动SOL: `{context['solAmount']:.2f} SOL`\n发起地址: `{short_trader_address}`",
+        value=f"​启动认购: `{context['initialBuy']:.2f} {context['symbol']}`\n​实存SOL: `{context['solAmount']:.2f} SOL`\n发起地址: `{short_trader_address}`",
         inline=True
     )
     embed.add_field(
         name="\n📈 池子状态",
-        value=f"盘子市值: `{context['marketCapSol']:.2f} SOL`\n盘子代币存量: `{context['vTokensInBondingCurve']:.2f} {context['symbol']}`\n盘子SOL存量: `{context['vSolInBondingCurve']:.2f} SOL`",
+        value=f"代币市值: `{context['marketCapSol']:.2f} SOL`\n虚拟SOL: `{context['vSolInBondingCurve']:.2f} SOL`\n虚拟代币: `{context['vTokensInBondingCurve']:.2f} {context['symbol']}`",
         inline=True
     )
     
@@ -162,16 +162,28 @@ def _create_embed(context: dict) -> discord.Embed:
     diff_percentage = (sol_diff / context['solAmount']) * 100 if context['solAmount'] > 0 else 0
     
     # 只在差值明显过大时提示风险
-    if diff_percentage > 1:  # 差额超过1%才视为明显异常
-        warning_emoji = "⚠️"
-        warning_message = f"差额: `{sol_diff:.2f} SOL` (`{diff_percentage:.2f}%`)\n提示: 差额指盘子SOL存量与发币时投入的SOL之间的差值\n**注意**: 差额过大, 明显高于正常协议费用, 请评估风险"
-    else:
-        warning_emoji = "✅"
-        warning_message = f"差额: `{sol_diff:.2f} SOL` (`{diff_percentage:.2f}%`)\n提示: 差额指盘子SOL存量与发币时投入的SOL之间的差值\n差额正常, 包含正常的协议费用"
+    # if diff_percentage > 1:  # 差额超过1%才视为明显异常
+    #     warning_emoji = "⚠️"
+    #     warning_message = f"差额: `{sol_diff:.2f} SOL` (`{diff_percentage:.2f}%`)\n提示: 差额指盘子SOL存量与发币时投入的SOL之间的差值\n**注意**: 差额过大, 明显高于正常协议费用, 请评估风险"
+    # else:
+    #     warning_emoji = "✅"
+    #     warning_message = f"差额: `{sol_diff:.2f} SOL` (`{diff_percentage:.2f}%`)\n提示: 差额指盘子SOL存量与发币时投入的SOL之间的差值\n差额正常, 包含正常的协议费用"
     
+    # embed.add_field(
+    #     name=f"\n{warning_emoji} SOL资金差额",
+    #     value=warning_message,
+    #     inline=False
+    # )
+
+    embed.add_field(name="", value="", inline=False)
     embed.add_field(
-        name=f"\n{warning_emoji} SOL资金差额",
-        value=warning_message,
+        name="\n🔗 绑定曲线合约地址: ",
+        value=f"```fix\n{context['bondingCurveKey']}\n```",
+        inline=False
+    )
+    embed.add_field(
+        name="\n🧑‍💻 部署代币钱包地址: ",
+        value=f"```fix\n{context['traderPublicKey']}\n```", 
         inline=False
     )
 

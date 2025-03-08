@@ -162,7 +162,7 @@ class DiscordBot:
                 if trader_address:
                     view.add_item(
                         discord.ui.Button(
-                            label="查看完整发起地址",
+                            label="部署代币钱包地址",
                             style=discord.ButtonStyle.secondary,
                             custom_id=f"view_address_{trader_address}"
                         )
