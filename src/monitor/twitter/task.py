@@ -135,15 +135,6 @@ class SearchTask:
             await self.on_error_callback(original_tokens)
             await self.account_pool.release_account(self.account, False)
         finally:
-            # 确保客户端内部httpx资源被正确释放
-            if self.client is not None:
-                try:
-                    await self.client.http.aclose()
-                    logging.debug(f"🧹 搜索任务结束，httpx连接已关闭 ({self.account.email})")
-                except Exception as e:
-                    logging.warning(f"⚠️ 关闭httpx连接时出错: {str(e)}")
-                self.client = None
-                
             await self.on_finish_callback(self, self.account.email)
 
     async def _monitor_social_data(self, current_mint_list: list):
@@ -265,15 +256,6 @@ class SearchTask:
             bot = DiscordBot()
             await bot.send_account_error(self.account, error_name, error_info)
             logging.info(f'🔄 开始更换账号...')
-            
-            # 关闭旧客户端内部的httpx连接
-            if self.client is not None:
-                try:
-                    await self.client.http.aclose()
-                    logging.debug(f"🧹 已关闭旧客户端的httpx连接 ({self.account.email})")
-                except Exception as close_error:
-                    logging.warning(f"⚠️ 关闭httpx连接时出错: {str(close_error)}")
-                self.client = None
             
             # 释放旧账号(标记为不可用)
             await self.account_pool.release_account(self.account, False)

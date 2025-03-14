@@ -6,7 +6,7 @@ import asyncio
 from aiohttp_socks import ProxyConnector
 from discord.ext import commands
 
-from config import settings
+from config.config_loader import get_config
 
 
 class DiscordBot:
@@ -35,7 +35,7 @@ class DiscordBot:
             return
 
         # 代理配置
-        proxy_url = settings.DISCORD.get("proxy")
+        proxy_url = get_config('DISCORD.proxy')
         if proxy_url:
             try:
                 self._connector = ProxyConnector.from_url(
@@ -53,7 +53,7 @@ class DiscordBot:
 
         # 机器人实例化
         self.bot = commands.Bot(
-            command_prefix=settings.DISCORD.get("prefix", "!"),
+            command_prefix=get_config('DISCORD.prefix', "!"),
             intents=intents,
             connector=self._connector,
             # 2.x优化参数
@@ -100,7 +100,7 @@ class DiscordBot:
     async def _run_bot(self) -> None:
         """独立运行任务（带异常处理）"""
         try:
-            await self.bot.start(settings.DISCORD["token"])
+            await self.bot.start(get_config('DISCORD.token'))
         except discord.LoginFailure:
             logging.critical("❌ Discord登录失败，请检查token或代理")
             self._initialized = False
@@ -229,6 +229,6 @@ class DiscordBot:
         embed.set_footer(text="发生时间: " + discord.utils.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
 
         # 发送消息
-        await self.send_message(settings.DISCORD['channel']['system_channel'], embed=embed)
+        await self.send_message(get_config('DISCORD.channel.system_channel'), embed=embed)
 
     

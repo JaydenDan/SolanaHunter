@@ -10,7 +10,7 @@ import discord
 import pandas as pd
 from dataclasses import dataclass
 
-from config import settings
+from config.config_loader import get_config
 from src.notifier.discord.bot import DiscordBot
 from src.account.twitter.get_client import TwitterClientManager
 
@@ -261,7 +261,7 @@ class AccountPool:
 
             # 发送概览信息
             await discord_bot.send_message(
-                settings.DISCORD['channel']['system_channel'],
+                get_config('DISCORD.channel.system_channel'),
                 embed=overview_embed
             )
 
@@ -297,7 +297,7 @@ class AccountPool:
                         )
 
                     await discord_bot.send_message(
-                        settings.DISCORD['channel']['system_channel'],
+                        get_config('DISCORD.channel.system_channel'),
                         embed=details_embed
                     )
                     # 添加短暂延迟避免触发Discord限制
@@ -424,14 +424,6 @@ class AccountPool:
         except Exception as e:
             logging.warning(f"❌ 账号【{account.email}】搜索测试失败: {str(e)}")
             return False
-        finally:
-            # 关闭客户端内部的httpx连接
-            if client is not None:
-                try:
-                    await client.http.aclose()
-                    logging.debug(f"🧹 账号【{account.email}】测试完毕，httpx连接已关闭")
-                except Exception as e:
-                    logging.warning(f"⚠️ 关闭httpx连接时出错: {str(e)}")
 
     async def close(self):
         """关闭账号池，停止所有协程任务"""

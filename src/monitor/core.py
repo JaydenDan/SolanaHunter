@@ -96,17 +96,15 @@ class MonitorCore:
                 return
             # 数据消息处理
             elif 'signature' in data:
+                data['detect_time'] = datetime.now()
                 logging.info(
                     f'💰 监听到新的代币：Name=【{data["name"]}】 | Symbol=【{data["symbol"]}】 | Mint=【{data["mint"]}】'
                 )
-                # 只有当 solAmount 为 0 时才创建 SaL 任务, 并且 initialBuy 大于 0
-                if float(data.get('solAmount', 1)) == 0 and float(data.get('initialBuy', 1)) > 0:
-                    asyncio.create_task(
-                        engine.notify_process_without_twitter(data),
-                        name='SaL_' + data['symbol']
-                    )
-                # 1. 把新代币CA丢给search_task_manager
-                data['detect_time'] = datetime.now()
+                # AP, All Push, 规则引擎中判断是SaL还是HS (Has Score) 
+                asyncio.create_task(
+                    engine.notify_process_all_push(data),
+                    name='All_Push_' + data['symbol']
+                )
                 await self.task_manager.add_new_token(data)
             else:
                 logging.warning("⚠️ 未知消息格式: %s", data)

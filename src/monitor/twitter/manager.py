@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime
 
-from config import settings
+from config.config_loader import get_config
 from src.account.twitter.get_account import AccountPool
 from .task import SearchTask
 from src.utils.common_util import TaskCounter
@@ -18,7 +18,7 @@ class SearchTaskManager:
         self._is_creating_task = False  # 创建状态锁
         self._pending_lock = asyncio.Lock()  # CA队列操作锁
         self._task_counter = TaskCounter()
-        self.account_pool = AccountPool(settings.TWITTER['account_file_path'])
+        self.account_pool = AccountPool(get_config('TWITTER.account_file_path'))
 
     # 处理新代币
     async def add_new_token(self, token):
@@ -91,7 +91,7 @@ class SearchTaskManager:
             logging.info(f'✅ 已获取账号: {account.email}')
             
             # 创建新任务对象
-            new_task = SearchTask(settings.TWITTER, self.remove_task, self.recover_token, account)
+            new_task = SearchTask(get_config('TWITTER'), self.remove_task, self.recover_token, account)
             
             # 将CA添加到新任务中
             token_added = []

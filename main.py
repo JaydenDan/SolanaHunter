@@ -3,7 +3,8 @@ import logging
 import signal
 import sys
 from contextlib import asynccontextmanager
-from config import settings, logging_config
+from config import logging_config
+from config.config_loader import get_config
 from src.monitor import MonitorCore
 from src.notifier.discord.bot import DiscordBot
 
@@ -12,8 +13,8 @@ from src.notifier.discord.bot import DiscordBot
 async def app_lifespan():
     """正确的异步生命周期管理器"""
     monitor = MonitorCore(
-        blockchain_ws=settings.BLOCKCHAIN["websocket_url"],
-        rule_path=settings.PROJECT_ROOT / "config/rules.yaml"
+        blockchain_ws=get_config('BLOCKCHAIN.websocket_url'),
+        rule_path=get_config('PROJECT_ROOT') / "config/rules.yaml"
     )
 
     try:
