@@ -62,7 +62,7 @@ def load_config():
             "cookies_file_path": os.getenv("TWITTER_COOKIES_FILE_PATH", str(PROJECT_ROOT / "twitter_cookies.txt")),
             "proxy": os.getenv("TWITTER_PROXY", "http://127.0.0.1:7890"),
             "account_file_path": os.getenv("TWITTER_ACCOUNT_FILE_PATH", str(PROJECT_ROOT / "twitter_account.xlsx")),
-            "enable_proxy": os.getenv("ENABLE_TWITTER_PROXY", "True").lower() == "true",
+            "enable_proxy": os.getenv("TWITTER_ENABLE_PROXY", "True").lower() == "true",
         },
         
         # 区块链监听配置

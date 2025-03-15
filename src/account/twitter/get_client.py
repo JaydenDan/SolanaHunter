@@ -61,22 +61,27 @@ class TwitterClientManager:
             retry_delay: int = 3
     ) -> Client | None:
         try:
-            # 解析代理信息
-            proxy_info = proxy.split(':')
-            if len(proxy_info) != 4:
-                raise ValueError("代理格式错误, 正确格式: ip:port:username:password")
+            proxy_enable = get_config('TWITTER.enable_proxy')
+            if proxy_enable:
+                # 解析代理信息
+                proxy_info = proxy.split(':')
+                if len(proxy_info) != 4:
+                    raise ValueError("代理格式错误, 正确格式: ip:port:username:password")
 
-            # 构建代理URL
-            socks_url = f'socks5://{proxy_info[2]}:{proxy_info[3]}@{proxy_info[0]}:{proxy_info[1]}'
-            # 构建http代理（本地代理）
-            http_url = f'http://localhost:7890'
-            client = Client(language='en-US', proxy=http_url)
+                # 构建代理URL
+                socks_url = f'socks5://{proxy_info[2]}:{proxy_info[3]}@{proxy_info[0]}:{proxy_info[1]}'
+                # 构建http代理（本地代理）
+                http_url = f'http://localhost:7890'
+                client = Client(language='en-US', proxy=http_url)
+                proxy_valid = await check_proxy(client, proxy_info[0], socks_url)
+                if not proxy_valid:
+                    logging.error(f"❌ 获取客户端失败：代理验证未通过 ({email})")
+                    return None
+            else:
+                client = Client(language='en-US')
             
             # 检查代理IP应用是否正确
-            # proxy_valid = await check_proxy(client, proxy_info[0], socks_url)
-            # if not proxy_valid:
-            #     logging.error(f"❌ 获取客户端失败：代理验证未通过 ({email})")
-            #     return None
+
             cookie_file = self._get_cookie_path(email)
             
             # 尝试加载和验证Cookie
