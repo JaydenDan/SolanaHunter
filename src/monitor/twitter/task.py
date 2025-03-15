@@ -173,6 +173,7 @@ class SearchTask:
                                 "mint": data["mint"],
                                 # 交易者公钥
                                 "traderPublicKey": data["traderPublicKey"],
+                                "dev_balance": data["dev_balance"],
                                 # DEV创业次数
                                 "entrepreneurial_attempts_count": data["entrepreneurial_attempts_count"],
                                 # 交易类型（create/swap等）
