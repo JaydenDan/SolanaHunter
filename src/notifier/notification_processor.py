@@ -22,15 +22,17 @@ async def to_notify_token(token_data):
     try:
         # 获取规则引擎的单例实例（已在main中初始化）
         rule_engine = RuleEngine()  # 单例模式会返回已初始化的实例
-        token_data['detect_time'] = token_data['detect_time'].strftime('%Y-%m-%d %H:%M:%S')
+        # 复制一份，防止修改引用
+        data = token_data
+        data['detect_time'] = data['detect_time'].strftime('%Y-%m-%d %H:%M:%S')
         # 评估规则  
-        triggered_rules = rule_engine.evaluate(token_data)
+        triggered_rules = rule_engine.evaluate(data)
 
         # 记录触发的规则
         for rule in triggered_rules:
             # 构建通知内容
             notification = {
-                "token_data": token_data,  # 代币数据 #TODO datetime不能json序列化
+                "token_data": data,  # 代币数据 #TODO datetime不能json序列化
                 "rule_id": rule["rule_id"],
                 "rule_name": rule["rule_name"],
                 "channel": rule["channel"],
