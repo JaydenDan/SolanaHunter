@@ -133,7 +133,7 @@ class MonitorCore:
                     to_notify_token(data),
                     name='All_Push_' + data['symbol']
                 )
-                # await self.task_manager.add_new_token(data)
+                await self.task_manager.add_new_token(data)
             else:
                 logging.warning("⚠️ 未知消息格式: %s", data)
         except Exception as e:
