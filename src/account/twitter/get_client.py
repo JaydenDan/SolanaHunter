@@ -6,6 +6,7 @@ import httpcore
 import httpx
 from socksio import ProtocolError
 from twikit.client.client import Client
+from asyncio import TimeoutError
 
 from config.config_loader import get_config
 
@@ -104,7 +105,8 @@ class TwitterClientManager:
                         await client.login(
                             auth_info_1=username,
                             auth_info_2=email, 
-                            password=password
+                            password=password,
+                            enable_ui_metrics=False
                         )
                         logging.info(f'✅ 登录成功 ({email})')
                         break  # 登录成功，跳出重试循环
@@ -147,4 +149,22 @@ class TwitterClientManager:
                 logging.warning(f'🚫 获取客户端失败：账号【{email}】账号被禁止访问-403, 需要更换账号')
                 return None
             raise
+
+
+async def _login_with_timeout(client, username, email, password):
+    """带超时控制的登录函数"""
+    try:
+        return await asyncio.wait_for(
+            client.login(
+                auth_info_1=username,
+                auth_info_2=email,
+                password=password
+            ),
+            timeout=30.0  # 30秒超时
+        )
+    except TimeoutError:
+        logging.error(f"⚠️ 登录超时 (用户: {username})")
+    except Exception as e:
+        logging.error(f"❌ 登录失败 (用户: {username}): {str(e)}")
+        raise
 
