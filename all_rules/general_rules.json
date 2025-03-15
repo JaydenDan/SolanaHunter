@@ -1,0 +1,81 @@
+{
+  "rules": [
+    {
+      "id": "dev_balance_10",
+      "name": "开发者余额超过100SOL",
+      "description": "当代币开发者余额超过10 SOL时触发",
+      "enable": true,
+      "condition": {
+        "type": "and",
+        "conditions": [
+          {
+            "type": "not_exists",
+            "field": "social"
+          },
+          {
+            "type": ">",
+            "field": "dev_balance",
+            "value": 10
+          }
+        ]
+      },
+      "action": {
+        "type": "notify",
+        "channel": 1348352340222152814
+      }
+    },
+    {
+      "id": "launch_without_twitter",
+      "name": "上线就发射（无推特）",
+      "description": "当代币上线就发射且没有推特时触发",
+      "enable": true,
+      "condition": {
+        "type": "and",
+        "conditions": [
+          {
+            "type": "not_exists",
+            "field": "social"
+          },
+          {
+            "type": "==",
+            "field": "solAmount",
+            "value": 0
+          },
+          {
+            "type": ">",
+            "field": "initialBuy",
+            "value": 1
+          }
+        ]
+      },
+      "action": {
+        "type": "notify",
+        "channel": 1347601435742965922
+      }
+    },
+    {
+      "id": "has_score",
+      "name": "有评分（无推特）",
+      "description": "当代币有评分且没有推特时触发",
+      "enable": true,
+      "condition": {
+        "type": "and",
+        "conditions": [
+          {
+            "type": "not_exists",
+            "field": "social"
+          },
+          {
+            "type": ">",
+            "field": "solAmount",
+            "value": 14
+          }
+        ]
+      },
+      "action": {
+        "type": "notify",
+        "channel": 1347944888574152764
+      }
+    }
+  ]
+} 

@@ -1,5 +1,3 @@
-import logging
-import asyncio
 from typing import Optional, Any, Dict, List, Tuple, Union
 import time
 import aiomysql

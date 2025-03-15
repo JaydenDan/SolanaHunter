@@ -6,15 +6,13 @@ from contextlib import asynccontextmanager
 from config import logging_config
 from config.config_loader import get_config
 from src.monitor import MonitorCore
-from src.notifier.discord.bot import DiscordBot
 
 
 @asynccontextmanager
 async def app_lifespan():
     """正确的异步生命周期管理器"""
     monitor = MonitorCore(
-        blockchain_ws=get_config('BLOCKCHAIN.websocket_url'),
-        rule_path=get_config('PROJECT_ROOT') / "config/rules.yaml"
+        blockchain_ws=get_config('BLOCKCHAIN.websocket_url')
     )
 
     try:
@@ -33,13 +31,12 @@ async def main():
     logging.getLogger('main')
     logging.info("✅ 日志系统启动初始化成功")
 
-    # 初始化机器人
-    bot = DiscordBot()
-    try:
-        await bot.init_bot()  # 确保初始化完成
-    except Exception as e:
-        logging.error(f"❌ 机器人初始化失败：{e}")
-        return
+    # 初始化规则引擎
+    from src.rules.rule_engine import RuleEngine
+    rule_engine = RuleEngine()
+    rule_files_dir = get_config("RULE_FILES_DIR_PATH", "all_rules")
+    rule_engine.initialize(rule_files_dir)
+    logging.info(f"✅ 规则引擎初始化成功，已加载规则目录: {rule_files_dir}")
 
     shutdown_event = asyncio.Event()
     # 注册系统信号

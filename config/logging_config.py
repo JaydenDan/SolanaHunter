@@ -8,6 +8,7 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from typing import Optional
 from pathlib import Path
+from dotenv import load_dotenv
 
 # 由于config_loader可能会导入logging_config，
 # 所以这里不能导入get_config，否则会产生循环导入问题
@@ -15,7 +16,6 @@ from pathlib import Path
 
 def get_log_dir():
     """获取日志目录"""
-    from dotenv import load_dotenv
     
     # 项目根目录
     project_root = Path(__file__).parent.parent

@@ -1,7 +1,6 @@
 import logging
 import asyncio
-from typing import Optional, Any, Dict, List, Union
-import redis.asyncio as redis
+from typing import Optional, Any, Dict, List
 from redis.asyncio import Redis, ConnectionPool
 
 from config.logging_config import get_logger

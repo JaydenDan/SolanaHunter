@@ -1,18 +1,16 @@
 import asyncio
+import json
 import logging
 import os
 from typing import Optional, List
 from datetime import datetime
 import os
-import time
-
-import discord
 import pandas as pd
 from dataclasses import dataclass
 
-from config.config_loader import get_config
-from src.notifier.discord.bot import DiscordBot
+from src.database.redis.redis_manager import RedisManager
 from src.account.twitter.get_client import TwitterClientManager
+from src.notifier.notification_processor import to_notify_account_report
 
 
 @dataclass
@@ -28,7 +26,7 @@ class TwitterAccount:
 class AccountPool:
     _instance = None
 
-    def __new__(cls, excel_path: str):
+    def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
@@ -49,6 +47,7 @@ class AccountPool:
         self._start_maintenance_coroutine()
         self._start_excel_check_coroutine()
         self._initialized = True
+        self.redis_manager = RedisManager()
 
     def _init_accounts(self):
         """
@@ -232,96 +231,38 @@ class AccountPool:
                 logging.info(f'📥 已释放Twitter账号【{account.email}】')
 
     async def _send_status_report(self):
-        """发送账号状态报告到Discord"""
+        """发送账号状态报告到Redis, 等待Discord机器人处理"""
+
         try:
-            # 统计账号状态
-            total_accounts = len(self._accounts)
-            in_use = sum(1 for acc in self._accounts if acc.in_use)
-            disabled = sum(1 for acc in self._accounts if acc.disabled)
-            available = sum(1 for acc in self._accounts if not acc.in_use and not acc.disabled)
-
-            # 创建概览embed
-            discord_bot = DiscordBot()
-            overview_embed = discord.Embed(
-                title="📊 Twitter账号池状态报告",
-                description=f"扫描时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                color=discord.Color.blue()
-            )
-
-            overview_embed.add_field(
-                name="📈 统计概览",
-                value=f"```\n"
-                      f"总账号数: {total_accounts}\n"
-                      f"使用中: {in_use}\n"
-                      f"不可用: {disabled}\n"
-                      f"可用: {available}\n"
-                      f"```",
-                inline=False
-            )
-
-            # 发送概览信息
-            await discord_bot.send_message(
-                get_config('DISCORD.channel.system_channel'),
-                embed=overview_embed
-            )
-
-            # 按状态分组处理账号详情 (不包括可用账号) 
-            status_groups = {
-                "🔴 不可用账号": [acc for acc in self._accounts if acc.disabled],
-                "🟡 使用中账号": [acc for acc in self._accounts if acc.in_use]
+            # 创建json格式状态报告内容
+            report_content = {
+                "total_accounts": len(self._accounts),
+                "in_use_accounts": [{"email": acc.email, "username": acc.username} for acc in self._accounts if acc.in_use],
+                "disabled_accounts": [{"email": acc.email, "username": acc.username} for acc in self._accounts if acc.disabled],
+                "available_accounts": [{"email": acc.email, "username": acc.username} for acc in self._accounts if not acc.in_use and not acc.disabled],
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
-
-            # 分组发送账号详情
-            for status_title, accounts in status_groups.items():
-                if not accounts:
-                    continue
-
-                # 将账号分成更小的批次 (每批最多5个账号) 
-                for i in range(0, len(accounts), 5):
-                    batch = accounts[i:i + 5]
-                    
-                    details_embed = discord.Embed(
-                        title=f"{status_title} ({i//5 + 1}/{(len(accounts) + 4)//5})",
-                        color=discord.Color.blue()
-                    )
-
-                    for acc in batch:
-                        # 简化每个账号的显示信息
-                        details_embed.add_field(
-                            name=f"📧 {acc.username}",
-                            value=f"```\n"
-                                  f"邮箱: {acc.email}\n"
-                                  f"代理: {acc.proxy.split(':')[0]}:{acc.proxy.split(':')[1]}\n"
-                                  f"```",
-                            inline=False
-                        )
-
-                    await discord_bot.send_message(
-                        get_config('DISCORD.channel.system_channel'),
-                        embed=details_embed
-                    )
-                    # 添加短暂延迟避免触发Discord限制
-                    await asyncio.sleep(1)
-
+            self.redis_manager.lpush("discord:account:report:notifications", json.dumps(report_content))
         except Exception as e:
-            logging.error(f"❌ 发送状态报告失败: {str(e)}", exc_info=True)
+            logging.error(f"❌ 发送账号状态报告到Redis失败: {str(e)}", exc_info=True)
+            return
 
     async def _account_maintenance_loop(self):
         """账号维护循环"""
         while self._auxiliary_coroutine_running:  # 使用_auxiliary_coroutine_running标志控制循环
-            await asyncio.sleep(600)  # 10分钟 = 600秒
+
             try:
+                await asyncio.sleep(600)  # 10分钟 = 600秒
                 logging.info("🔄 开始账号维护检查...")
-                
                 # 获取需要检查的账号列表副本
-                accounts_to_check = []
                 async with self._lock:
                     # 只复制需要检查的不可用账号
                     accounts_to_check = [account for account in self._accounts if account.disabled]
                 
                 if not accounts_to_check:
                     logging.info("✅ 没有需要维护的账号")
-                    await self._send_status_report()
+                    await to_notify_account_report(self._accounts)
+                    # await asyncio.sleep(600)  # 10分钟 = 600秒
                     continue
 
                 # 在副本上进行维护检查
@@ -348,8 +289,7 @@ class AccountPool:
 
                 # 发送状态报告
                 if self._auxiliary_coroutine_running:
-                    await self._send_status_report()
-                
+                    await to_notify_account_report(self._accounts)
             except Exception as e:
                 logging.error(f"❌ 账号维护过程发生错误: {str(e)}", exc_info=True)
 

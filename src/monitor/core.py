@@ -3,28 +3,51 @@ import asyncio
 from datetime import datetime
 import json
 import logging
-from pathlib import Path
+import time
+
+from config import get_config
+from src.database.mysql.mysql_manager import MySQLManager
+from src.notifier.notification_processor import to_notify_token
 from .blockchain.new_token_listener import NewTokenListener
-from .rules import engine
 from .twitter.manager import SearchTaskManager as TwitterSearchTaskManager
-from ..notifier.discord.bot import DiscordBot
 from ..utils import TaskCounter
 from ..account.twitter.get_account import AccountPool
+from solana.rpc.api import Client
+from solders.pubkey import Pubkey
 
+
+async def get_dev_balance(dev_address):
+    # 创建RPC客户端并查询余额
+    solana_client = Client(get_config('BLOCKCHAIN_RPC.solana_official_rpc_url'))
+
+    # 执行查询
+    retry_count = 3
+    dev_balance = 0
+    while retry_count > 0:
+        try:
+            balance_response = solana_client.get_balance(Pubkey.from_string(dev_address))
+            lamports = balance_response.value
+            sol_balance = lamports / 1e9  # 转换为SOL
+            dev_balance = round(sol_balance, 5)
+            break
+        except Exception as e:
+            retry_count -= 1
+            if retry_count == 0:
+                dev_balance = 0
+            time.sleep(1)  # 重试间隔1秒
+    return dev_balance
 
 class MonitorCore:
     """实时监控协调中枢"""
 
-    def __init__(self, blockchain_ws: str, rule_path: Path):
+    def __init__(self, blockchain_ws: str):
         # 初始化组件
         self._task_counter = TaskCounter()
         self.listener = NewTokenListener(blockchain_ws)
         logging.getLogger(__name__)
         self.task_manager = TwitterSearchTaskManager()
-
+        self.mysql_manager = MySQLManager()
         self._shutdown_initiated = asyncio.Event()
-
-        # 文件监控配置
 
         # 状态管理
         self._running = False
@@ -76,12 +99,6 @@ class MonitorCore:
         # 关闭账号池任务
         account_pool = AccountPool("")  # 单例模式会返回已存在的实例
         await account_pool.close()
-        
-        bot = DiscordBot()
-        await bot.close()
-        logging.info(f"🛑 Discord Bot已关闭")
-        # await self._stop_file_watcher()
-        # await self.task_manager.cleanup()
         self._running = False
         logging.info("✅ 系统已经正确关闭")
 
@@ -97,15 +114,26 @@ class MonitorCore:
             # 数据消息处理
             elif 'signature' in data:
                 data['detect_time'] = datetime.now()
+
+                # 查询token_creation表中是否有相同的trader_public_key的记录，并计算数量
+                if data['traderPublicKey']:
+                    trader_pk = data['traderPublicKey']
+                    query = "SELECT COUNT(*) FROM token_creation WHERE trader_public_key = %s"
+                    result = await self.mysql_manager.execute_query(query, (trader_pk,))
+                    dev_balance = await get_dev_balance(trader_pk)
+                    count = result[0]['COUNT(*)'] if result else 0
+                    data['entrepreneurial_attempts_count'] = count
+                    data['dev_balance'] = dev_balance
+
                 logging.info(
-                    f'💰 监听到新的代币：Name=【{data["name"]}】 | Symbol=【{data["symbol"]}】 | Mint=【{data["mint"]}】'
+                    f'💰 监听到新的代币：Name=[{data["name"]}] | Symbol=[{data["symbol"]}] | Mint=[{data["mint"]}] | DEV=[{data["traderPublicKey"]} | 创业次数=[{data["entrepreneurial_attempts_count"]}]次'
                 )
                 # AP, All Push, 规则引擎中判断是SaL还是HS (Has Score) 
                 asyncio.create_task(
-                    engine.notify_process_all_push(data),
+                    to_notify_token(data),
                     name='All_Push_' + data['symbol']
                 )
-                await self.task_manager.add_new_token(data)
+                # await self.task_manager.add_new_token(data)
             else:
                 logging.warning("⚠️ 未知消息格式: %s", data)
         except Exception as e:

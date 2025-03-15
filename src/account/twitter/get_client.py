@@ -7,6 +7,8 @@ import httpx
 from socksio import ProtocolError
 from twikit.client.client import Client
 
+from config.config_loader import get_config
+
 
 async def check_proxy(client: Client, proxy_ip, socks_url):
     """验证代理是否生效(带ProtocolError重试机制)"""
@@ -40,10 +42,10 @@ async def check_proxy(client: Client, proxy_ip, socks_url):
 
 class TwitterClientManager:
 
-    def __init__(self, cookie_path: str = 'cookies') -> None:
+    def __init__(self) -> None:
         self.client = Client()
-        self.cookie_path = cookie_path
-        os.makedirs(self.cookie_path, exist_ok=True)
+        self.cookie_path = get_config('TWITTER.cookies_file_path')
+        os.makedirs(self.cookie_path, exist_ok=True)    
 
     def _get_cookie_path(self, email: str) -> str:
         """生成标准化Cookie文件路径"""

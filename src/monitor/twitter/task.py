@@ -8,9 +8,10 @@ import httpx
 from socksio import ProtocolError
 from twikit import AccountSuspended, Unauthorized, TooManyRequests
 
-from src.notifier.discord.bot import DiscordBot
+from src.notifier.notification_processor import to_notify_account_error, to_notify_token
+from src.utils import common_util
 from src.utils.common_util import TaskCounter
-from ..rules import engine
+
 from ...account.twitter import TwitterClientManager
 from ...account.twitter.get_account import AccountPool, TwitterAccount
 
@@ -147,15 +148,67 @@ class SearchTask:
             search_words = await _search_words_maker(current_mint_list)
             # 搜索帖子
             tweets = await self._search_tweets(str(search_words), "Latest")
-
-            if len(tweets) > 0:
-                mint_set = set(current_mint_list)
-                remaining_mint, self.token_list = await engine.notify_process_with_twitter(
-                    tweets=tweets,
-                    mint_set=mint_set,
-                    token_list=self.token_list,
-                    remaining_mint=remaining_mint
-                )
+            mint_set = set(current_mint_list)
+            for t in tweets:
+                tweet_mint_list = common_util.get_mint_in_tweet(t['text'])
+                for tweet_mint in tweet_mint_list:
+                    logging.info(f'🔍️ 当前搜索到的推特帖子内容为:\n【{t["text"]}】')
+                    if tweet_mint in mint_set:
+                        # 根据mint在token_list中查找token完整信息
+                        matched_item = next(
+                            (item for item in self.token_list
+                             if item.get("mint") == tweet_mint),
+                            None  # 找不到时返回 None
+                        ) 
+                        if matched_item is None:
+                            logging.warning(f'⚠️ 未找到匹配的 token, CA: {tweet_mint}, 可能是一个CA有多个推文, 在前一个推文触发时已将该CA移出列表。')
+                            continue  # 跳过或执行其他逻辑
+                        data = matched_item['token']
+                        logging.info(f'CA反搜索到的数据【{data}】')
+                        if data:
+                            context = {
+                                # 交易签名（唯一标识）
+                                "signature": data["signature"],
+                                # 代币合约地址
+                                "mint": data["mint"],
+                                # 交易者公钥
+                                "traderPublicKey": data["traderPublicKey"],
+                                # DEV创业次数
+                                "entrepreneurial_attempts_count": data["entrepreneurial_attempts_count"],
+                                # 交易类型（create/swap等）
+                                "txType": data["txType"],
+                                # 初始购买金额（SOL）
+                                "initialBuy": data["initialBuy"],
+                                # 当前交易SOL金额
+                                "solAmount": data["solAmount"],
+                                # 该代币采用的 Bonding Curve (弹性定价模型) 的合约地址。Bonding Curve 通过数学公式决定代币的价格。
+                                "bondingCurveKey": data["bondingCurveKey"],
+                                # 盘子代币存量
+                                "vTokensInBondingCurve": data["vTokensInBondingCurve"],
+                                # 盘子SOL存量
+                                "vSolInBondingCurve": data["vSolInBondingCurve"],
+                                # 市值（SOL计价）
+                                "marketCapSol": data["marketCapSol"],
+                                # 代币名称
+                                "name": data["name"],
+                                # 代币符号
+                                "symbol": data["symbol"],
+                                # 代币元数据URI
+                                "uri": data["uri"],
+                                # 所属交易池
+                                "pool": data["pool"],
+                                # 检测时间
+                                "detect_time": data["detect_time"],  
+                                # 社交媒体数据（异步获取）
+                                "social": t
+                            }
+                            await to_notify_token(context)
+                            if tweet_mint in remaining_mint:
+                                remaining_mint.remove(tweet_mint)
+                                # 删除已处理的token信息
+                                self.token_list = [item for item in self.token_list if item.get("mint") != tweet_mint]
+                    else:
+                        logging.warning(f"⚠️ 当前推特中的CA【{tweet_mint}】不在CA监控名单中, 请检查程序逻辑！")
             return remaining_mint
         except Exception as e:
             logging.error(f"❌ 社交媒体数据获取失败: {str(e)}", exc_info=True)
@@ -253,8 +306,7 @@ class SearchTask:
     async def _reinitialize_client(self, error_name: str, error_info: str):
         """重新初始化客户端(更换账号)"""
         try:
-            bot = DiscordBot()
-            await bot.send_account_error(self.account, error_name, error_info)
+            await to_notify_account_error(self.account, error_name, error_info)
             logging.info(f'🔄 开始更换账号...')
             
             # 释放旧账号(标记为不可用)

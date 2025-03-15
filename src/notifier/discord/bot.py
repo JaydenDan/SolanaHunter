@@ -2,11 +2,11 @@ from typing import Optional, Union, List
 import logging
 import discord
 import asyncio
-
+import json
 from aiohttp_socks import ProxyConnector
 from discord.ext import commands
-
 from config.config_loader import get_config
+from src.database.redis.redis_manager import RedisManager
 
 
 class DiscordBot:
@@ -28,6 +28,7 @@ class DiscordBot:
         self._task: Optional[asyncio.Task] = None
         self._initialized = False
         self._interaction_handler_registered = False
+        self.redis_manager = RedisManager()  # 初始化Redis管理器
 
     async def init_bot(self) -> None:
         """异步初始化机器人（2.x规范）"""
@@ -90,6 +91,9 @@ class DiscordBot:
             self._task = asyncio.create_task(self._run_bot(), name="DiscordBot")
             await asyncio.wait_for(self.bot.wait_until_ready(), timeout=60)
             self._initialized = True
+
+            # 启动处理通知的协程
+            asyncio.create_task(self.process_notifications(), name="ProcessNotifications")
         except asyncio.TimeoutError:
             logging.error("❌ Discord机器人启动超时")
             raise
@@ -181,54 +185,5 @@ class DiscordBot:
             await self._connector.close()
 
         self._initialized = False
-
-    async def send_account_error(
-            self,
-            account,
-            error_name: str,
-            error_info: Optional[str] = None
-    ) -> None:
-        """
-        推送账号错误消息到Discord
-        :param account: Twitter账号对象
-        :param error_name: 错误名称
-        :param error_info: 错误信息 
-        """
-        if not self.bot:
-            raise RuntimeError("❌ Discord 机器人未初始化！请先调用 init_bot()")
-
-        # 创建一个红色的embed
-        embed = discord.Embed(
-            title="🚨 Twitter账号异常警报",
-            description=error_name,
-            color=discord.Color.red(),
-            timestamp=discord.utils.utcnow()
-        )
-
-        # 添加账号信息
-        embed.add_field(
-            name="📧 账号信息",
-            value=f"```\n"
-                  f"邮箱: {account.email}\n"
-                  f"用户名: {account.username}\n"
-                  f"代理: {account.proxy.split(':')[0]}:{account.proxy.split(':')[1]}\n"
-                  f"```",
-            inline=False
-        )
-
-        if error_info:
-            # 获取最后一行内容
-            last_line = error_info.strip().split('\n')[-1]
-            embed.add_field(
-                name="🔍 错误详情", 
-                value=f"```python\n{last_line}\n```",
-                inline=False
-            )
-
-        # 添加时间戳和页脚
-        embed.set_footer(text="发生时间: " + discord.utils.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
-
-        # 发送消息
-        await self.send_message(get_config('DISCORD.channel.system_channel'), embed=embed)
 
     
