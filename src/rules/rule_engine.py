@@ -113,24 +113,24 @@ class RuleEngine:
         
         # 字符串操作符
         elif condition_type == "string_contains":
-            source_value = self._get_field_value(data, condition["source_field"], "")
+            source_value = str(self._get_field_value(data, condition["source_field"], "")).lower()
             
             if "value" in condition:
-                target_value = condition["value"]
+                target_value = str(condition["value"]).lower()
             else:
-                target_value = self._get_field_value(data, condition["target_field"], "")
+                target_value = str(self._get_field_value(data, condition["target_field"], "")).lower()
                 
-            return str(target_value) in str(source_value)
+            return target_value in source_value
         
         elif condition_type == "string_starts_with":
-            source_value = str(self._get_field_value(data, condition["source_field"], ""))
+            source_value = str(self._get_field_value(data, condition["source_field"], "")).lower()
             
             if "value" in condition:
-                target_value = condition["value"]
+                target_value = str(condition["value"]).lower()
             else:
-                target_value = self._get_field_value(data, condition["target_field"], "")
+                target_value = str(self._get_field_value(data, condition["target_field"], "")).lower()
                 
-            return source_value.startswith(str(target_value))
+            return source_value.startswith(target_value)
         
         # 存在性检查
         elif condition_type == "exists":
