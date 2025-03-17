@@ -58,8 +58,7 @@ class TwitterClientManager:
             username: str,
             password: str,
             proxy: str,  # 格式 "ip:port:user:pass"
-            max_retries: int = 3,
-            retry_delay: int = 3
+            max_retries: int = 3
     ) -> Client | None:
         try:
             proxy_enable = get_config('TWITTER.enable_proxy')

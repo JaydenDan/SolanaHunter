@@ -80,9 +80,9 @@ class SearchTaskManager:
             account = await self.account_pool.acquire()
             
             if not account:
-                logging.error("❌ 无法获取账号, 回滚CA到待处理队列")
+                logging.error(f"❌ 无法获取账号, 丢弃CA {batch}")
                 # 回滚CA到待处理队列
-                await self.recover_token(batch)
+                # await self.recover_token(batch)
                 # 重置创建状态标志
                 async with self._pending_lock:
                     self._is_creating_task = False

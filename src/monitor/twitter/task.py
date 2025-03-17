@@ -54,7 +54,7 @@ class SearchTask:
             )
             if not self.client:
                 # 重新初始化
-                await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info="代理验证未通过")
+                await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info="代理验证未通过", retry_count=0)
             logging.info(f'🎯Twikit Client初始化完毕! 加载账号: {self.account.email}')
             return
         except AccountSuspended as e:
@@ -86,7 +86,7 @@ class SearchTask:
                     break
                 except AccountSuspended as e:
                     logging.warning(f'🚫 账号初始化失败, 尝试更换账号重新初始化')
-                    success = await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
+                    success = await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e), retry_count=0)
                     if not success:
                         raise Exception(f'❌ 初始化客户端失败, 无法获取可用账号。') from e
                 except Exception as e:
@@ -281,7 +281,6 @@ class SearchTask:
                 if retry_count >= max_retries:
                     logging.error(f'🔄 已达到最大重试次数({max_retries})，搜索推文失败')
                     return []
-            
                 await asyncio.sleep(wait_time)
             except (AccountSuspended, TooManyRequests, Unauthorized) as e:
                 if isinstance(e, TooManyRequests):
@@ -290,25 +289,30 @@ class SearchTask:
                     logging.warning(f'🚫 账号【{self.account.email}】被暂停使用')
                 elif isinstance(e, Unauthorized):
                     logging.warning(f'🚫 账号【{self.account.email}】未授权-401')
-                await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
+                await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e), retry_count=0)
                 return []
             except Exception as e:
                 if "AttributeError: 'ClientTransaction' object has no attribute 'key'" in str(e):
                     logging.warning(f'🚫 账号【{self.account.email}】疑似封禁-AttributeError')
-                    await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
+                    await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e), retry_count=0)
                 elif "Forbidden" in str(e) or "403" in str(e):
                     logging.warning(f'🚫 账号【{self.account.email}】账号被禁止访问-403')
-                    await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e))
+                    await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e), retry_count=0)
                 else:
                     logging.error(f"❌ 搜索失败: {str(e)}")
                     raise Exception(f' 未预先处理的错误') from e
                 return []
 
-    async def _reinitialize_client(self, error_name: str, error_info: str):
+    async def _reinitialize_client(self, error_name: str, error_info: str, retry_count=0):
         """重新初始化客户端(更换账号)"""
         try:
+            # 最大换号次数限制
+            if retry_count >= 3:
+                logging.error(f'🚫 已达到最大换号次数(3次)，无法继续获取新账号')
+                return False
+                
             await to_notify_account_error(self.account, error_name, error_info)
-            logging.info(f'🔄 开始更换账号...')
+            logging.info(f'🔄 开始更换账号... (第{retry_count+1}次尝试)')
             
             # 释放旧账号(标记为不可用)
             await self.account_pool.release_account(self.account, False)
@@ -326,7 +330,7 @@ class SearchTask:
                 proxy=self.account.proxy
             )
             if not self.client:
-                await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info="代理验证未通过")
+                return await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info="代理验证未通过", retry_count=retry_count+1)
             else:
                 # 更新当前协程的名字
                 current_task = asyncio.current_task()
@@ -338,4 +342,4 @@ class SearchTask:
                 return True
         except Exception as e:
             logging.warning(f'🚫 账号【{self.account.email}】换号失败, 尝试继续换号, 错误信息: {str(e)}', exc_info=True)
-            return await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e.__traceback__))
+            return await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e.__traceback__), retry_count=retry_count+1)
