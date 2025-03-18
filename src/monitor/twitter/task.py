@@ -50,7 +50,8 @@ class SearchTask:
                 email=self.account.email,
                 username=self.account.username,
                 password=self.account.password,
-                proxy=self.account.proxy
+                proxy=self.account.proxy,
+                totp_secret=self.account.totp_secret
             )
             if not self.client:
                 # 重新初始化
@@ -318,7 +319,8 @@ class SearchTask:
                 email=self.account.email,
                 username=self.account.username,
                 password=self.account.password,
-                proxy=self.account.proxy
+                proxy=self.account.proxy,
+                totp_secret=self.account.totp_secret
             )
             if not self.client:
                 return await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info="", retry_count=retry_count+1)

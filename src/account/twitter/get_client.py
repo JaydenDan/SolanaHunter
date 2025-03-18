@@ -58,28 +58,22 @@ class TwitterClientManager:
             username: str,
             password: str,
             proxy: str,  # 格式 "ip:port:user:pass"
+            totp_secret: str,
             max_retries: int = 3
     ) -> Client | None:
         try:
-            proxy_enable = get_config('TWITTER.enable_proxy')
-            if proxy_enable:
-                # 解析代理信息
-                proxy_info = proxy.split(':')
-                if len(proxy_info) != 4:
-                    raise ValueError("代理格式错误, 正确格式: ip:port:username:password")
+            client = Client(language='en-US')
 
+            # 解析代理信息
+            proxy_info = proxy.split(':')
+            if len(proxy_info) == 4:
                 # 构建代理URL
                 socks_url = f'socks5://{proxy_info[2]}:{proxy_info[3]}@{proxy_info[0]}:{proxy_info[1]}'
                 # 构建http代理（本地代理）
                 http_url = f'http://localhost:7890'
-                client = Client(language='en-US', proxy=http_url)
+                client = Client(language='en-US', proxy=socks_url)
                 # 检查代理IP应用是否正确
-                proxy_valid = await check_proxy(client, proxy_info[0], socks_url)
-                if not proxy_valid:
-                    logging.error(f"❌ 获取客户端失败：代理验证未通过 ({email})")
-                    return None
-            else:
-                client = Client(language='en-US')
+                # proxy_valid = await check_proxy(client, proxy_info[0], socks_url)
 
             cookie_file = self._get_cookie_path(email)
 
@@ -101,12 +95,21 @@ class TwitterClientManager:
                 retry_count = 0
                 while retry_count < max_retries:
                     try:
-                        await client.login(
-                            auth_info_1=username,
-                            auth_info_2=email, 
-                            password=password,
-                            enable_ui_metrics=False
-                        )
+                        if totp_secret:
+                            await client.login(
+                                auth_info_1=username,
+                                auth_info_2=email, 
+                                password=password,
+                                totp_secret=totp_secret,
+                                enable_ui_metrics=False
+                            )
+                        else:
+                            await client.login(
+                                auth_info_1=username,
+                                auth_info_2=email, 
+                                password=password,
+                                enable_ui_metrics=False
+                            )
                         logging.info(f'✅ 登录成功 ({email})')
                         break  # 登录成功，跳出重试循环
                     except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
@@ -148,22 +151,3 @@ class TwitterClientManager:
                 logging.warning(f'🚫 获取客户端失败：账号【{email}】账号被禁止访问-403, 需要更换账号')
                 return None
             return None
-
-
-async def _login_with_timeout(client, username, email, password):
-    """带超时控制的登录函数"""
-    try:
-        return await asyncio.wait_for(
-            client.login(
-                auth_info_1=username,
-                auth_info_2=email,
-                password=password
-            ),
-            timeout=30.0  # 30秒超时
-        )
-    except TimeoutError:
-        logging.error(f"⚠️ 登录超时 (用户: {username})")
-    except Exception as e:
-        logging.error(f"❌ 登录失败 (用户: {username}): {str(e)}")
-        raise
-
