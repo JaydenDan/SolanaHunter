@@ -101,12 +101,7 @@ class TwitterClientManager:
                 retry_count = 0
                 while retry_count < max_retries:
                     try:
-                        await client.login(
-                            auth_info_1=username,
-                            auth_info_2=email, 
-                            password=password,
-                            enable_ui_metrics=False
-                        )
+                        await _login_with_timeout(client, username, email, password)
                         logging.info(f'✅ 登录成功 ({email})')
                         break  # 登录成功，跳出重试循环
                     except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:

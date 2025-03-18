@@ -54,7 +54,7 @@ class SearchTask:
             )
             if not self.client:
                 # 重新初始化
-                await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info="代理验证未通过", retry_count=0)
+                await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info="", retry_count=0)
             logging.info(f'🎯Twikit Client初始化完毕! 加载账号: {self.account.email}')
             return
         except AccountSuspended as e:
@@ -320,7 +320,7 @@ class SearchTask:
             # 获取新账号
             self.account = await self.account_pool.acquire()
             if not self.account:
-                raise Exception("❌ 无法获取新账号")
+                return
 
             # 创建新客户端
             self.client = await self.client_manager.get_client(
@@ -330,7 +330,7 @@ class SearchTask:
                 proxy=self.account.proxy
             )
             if not self.client:
-                return await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info="代理验证未通过", retry_count=retry_count+1)
+                return await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info="", retry_count=retry_count+1)
             else:
                 # 更新当前协程的名字
                 current_task = asyncio.current_task()
