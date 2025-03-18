@@ -69,11 +69,11 @@ class AccountPool:
                 for i in range(len(df)-1, -1, -1):
                     row = df.iloc[i]
                     account = TwitterAccount(
-                        email=row['email'],
-                        username=row['username'],
-                        password=row['password'],
-                        proxy=row['residential_proxy'],
-                        totp_secret=row['totp_secret'],
+                        email=str(row['email']) if not pd.isna(row['email']) else "",
+                        username=str(row['username']) if not pd.isna(row['username']) else "",
+                        password=str(row['password']) if not pd.isna(row['password']) else "",
+                        proxy=str(row['residential_proxy']) if not pd.isna(row['residential_proxy']) else "",
+                        totp_secret=str(row['totp_secret']) if not pd.isna(row['totp_secret']) else "",
                     )
                     self._accounts.append(account)
             else:
@@ -81,11 +81,11 @@ class AccountPool:
                 logging.info("📊 以正向顺序加载账号 (从前往后) ")
                 for _, row in df.iterrows():
                     account = TwitterAccount(
-                        email=row['email'],
-                        username=row['username'],
-                        password=row['password'],
-                        proxy=row['residential_proxy'],
-                        totp_secret=row['totp_secret'],
+                        email=str(row['email']) if not pd.isna(row['email']) else "",
+                        username=str(row['username']) if not pd.isna(row['username']) else "",
+                        password=str(row['password']) if not pd.isna(row['password']) else "",
+                        proxy=str(row['residential_proxy']) if not pd.isna(row['residential_proxy']) else "",
+                        totp_secret=str(row['totp_secret']) if not pd.isna(row['totp_secret']) else "",
                     )
                     self._accounts.append(account)
                 
@@ -127,15 +127,15 @@ class AccountPool:
             
             # 加载新账号数据并保留原状态
             for _, row in df.iterrows():
-                email = row['email']
+                email = str(row['email']) if not pd.isna(row['email']) else ""
                 new_emails.add(email)
                 
                 account = TwitterAccount(
                     email=email,
-                    username=row['username'],
-                    password=row['password'],
-                    proxy=row['residential_proxy'],
-                    totp_secret=row['totp_secret'],
+                    username=str(row['username']) if not pd.isna(row['username']) else "",
+                    password=str(row['password']) if not pd.isna(row['password']) else "",
+                    proxy=str(row['residential_proxy']) if not pd.isna(row['residential_proxy']) else "",
+                    totp_secret=str(row['totp_secret']) if not pd.isna(row['totp_secret']) else "",
                 )
                 
                 # 检查是否修改了账号信息
