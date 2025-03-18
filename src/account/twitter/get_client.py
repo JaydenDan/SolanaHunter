@@ -82,7 +82,7 @@ class TwitterClientManager:
                 client = Client(language='en-US')
 
             cookie_file = self._get_cookie_path(email)
-            
+
             # 尝试加载和验证Cookie
             need_login = True
             if os.path.exists(cookie_file):
@@ -101,7 +101,12 @@ class TwitterClientManager:
                 retry_count = 0
                 while retry_count < max_retries:
                     try:
-                        await _login_with_timeout(client, username, email, password)
+                        await client.login(
+                            auth_info_1=username,
+                            auth_info_2=email, 
+                            password=password,
+                            enable_ui_metrics=False
+                        )
                         logging.info(f'✅ 登录成功 ({email})')
                         break  # 登录成功，跳出重试循环
                     except (httpx.ConnectError, httpcore.ConnectError, ProtocolError, httpcore.ConnectTimeout, httpx.ConnectTimeout, httpx.ReadTimeout, httpcore.ReadTimeout) as e:
@@ -131,7 +136,7 @@ class TwitterClientManager:
             # 保存Cookie并返回初始化完成的客户端
             client.save_cookies(cookie_file)
             return client
-            
+
         except Exception as e:
             if "You'll need to wait before trying to log in again. Some blocks are removed automatically." in str(e):
                 logging.warning(f'🚫 获取客户端失败：账号【{email}】暂时封锁, 需要更换账号')
@@ -142,7 +147,7 @@ class TwitterClientManager:
             if "Forbidden" in str(e) or "403" in str(e):
                 logging.warning(f'🚫 获取客户端失败：账号【{email}】账号被禁止访问-403, 需要更换账号')
                 return None
-            raise
+            return None
 
 
 async def _login_with_timeout(client, username, email, password):

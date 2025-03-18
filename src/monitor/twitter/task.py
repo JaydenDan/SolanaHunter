@@ -80,18 +80,7 @@ class SearchTask:
     async def run(self):
         """执行搜索任务"""
         try:
-            while True:
-                try:
-                    await self.initialize_client()
-                    break
-                except AccountSuspended as e:
-                    logging.warning(f'🚫 账号初始化失败, 尝试更换账号重新初始化')
-                    success = await self._reinitialize_client(error_name=str(e.__class__.__name__), error_info=str(e), retry_count=0)
-                    if not success:
-                        raise Exception(f'❌ 初始化客户端失败, 无法获取可用账号。') from e
-                except Exception as e:
-                    raise Exception(f'❌ 初始化客户端失败, 当前search_task将被放弃。') from e
-
+            await self.initialize_client()
             logging.info(f'🔛 搜索任务已启动, 使用账号: {self.account.email}')
             while True:
                 await asyncio.sleep(20)
