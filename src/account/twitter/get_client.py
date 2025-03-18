@@ -6,7 +6,6 @@ import httpcore
 import httpx
 from socksio import ProtocolError
 from twikit.client.client import Client
-from asyncio import TimeoutError
 
 from config.config_loader import get_config
 
@@ -44,7 +43,6 @@ async def check_proxy(client: Client, proxy_ip, socks_url):
 class TwitterClientManager:
 
     def __init__(self) -> None:
-        self.client = Client()
         self.cookie_path = get_config('TWITTER.cookies_file_path')
         os.makedirs(self.cookie_path, exist_ok=True)    
 
@@ -65,15 +63,17 @@ class TwitterClientManager:
             client = Client(language='en-US')
 
             # 解析代理信息
-            proxy_info = proxy.split(':')
-            if len(proxy_info) == 4:
-                # 构建代理URL
-                socks_url = f'socks5://{proxy_info[2]}:{proxy_info[3]}@{proxy_info[0]}:{proxy_info[1]}'
-                # 构建http代理（本地代理）
-                http_url = f'http://localhost:7890'
-                client = Client(language='en-US', proxy=socks_url)
-                # 检查代理IP应用是否正确
-                # proxy_valid = await check_proxy(client, proxy_info[0], socks_url)
+            if proxy:
+                proxy_info = proxy.split(':')
+                if len(proxy_info) == 4:
+                    logging.info(f"Twitter Account{email}启动代理")
+                    # 构建代理URL
+                    socks_url = f'socks5://{proxy_info[2]}:{proxy_info[3]}@{proxy_info[0]}:{proxy_info[1]}'
+                    # 构建http代理（本地代理）
+                    http_url = f'http://localhost:7890'
+                    client = Client(language='en-US', proxy=socks_url)
+                    # 检查代理IP应用是否正确
+                    # proxy_valid = await check_proxy(client, proxy_info[0], socks_url)
 
             cookie_file = self._get_cookie_path(email)
 
@@ -89,6 +89,8 @@ class TwitterClientManager:
                 except Exception:
                     logging.warning(f'⚠️ Cookie失效, 执行重新登录 ({email})')
                     os.remove(cookie_file)
+            else:
+                logging.info(f"Twitter Account {email} Cookie未找到，执行登录")
 
             # 需要登录时执行登录流程
             if need_login:
@@ -96,6 +98,7 @@ class TwitterClientManager:
                 while retry_count < max_retries:
                     try:
                         if totp_secret:
+                            logging.info(f"Twitter Account {email} 进行 2FA 登录")
                             await client.login(
                                 auth_info_1=username,
                                 auth_info_2=email, 
@@ -104,6 +107,7 @@ class TwitterClientManager:
                                 enable_ui_metrics=False
                             )
                         else:
+                            logging.info(f"Twitter Account {email} 进行普通登录")
                             await client.login(
                                 auth_info_1=username,
                                 auth_info_2=email, 
@@ -150,4 +154,5 @@ class TwitterClientManager:
             if "Forbidden" in str(e) or "403" in str(e):
                 logging.warning(f'🚫 获取客户端失败：账号【{email}】账号被禁止访问-403, 需要更换账号')
                 return None
+            logging.error(f"❌ 获取客户端失败: {str(e)}", exc_info=True)
             return None
