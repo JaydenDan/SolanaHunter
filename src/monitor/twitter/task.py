@@ -55,7 +55,6 @@ class SearchTask:
             if not self.client:
                 # 重新初始化
                 await self._reinitialize_client(error_name='Twikit Client初始化为None', error_info="", retry_count=0)
-            
             logging.info(f'🎯Twikit Client初始化完毕! 加载账号: {self.account.email}')
             return
         except AccountSuspended as e:
@@ -85,6 +84,8 @@ class SearchTask:
             logging.info(f'🔛 搜索任务已启动, 使用账号: {self.account.email}')
             while True:
                 await asyncio.sleep(20)
+                if not self.client:
+                    raise Exception(f'❌ 客户端初始化失败, 无法继续搜索')
                 async with self.lock:
                     current_ca = self.mint_list.copy()
                     self.mint_list.clear()
@@ -299,7 +300,7 @@ class SearchTask:
             # 最大换号次数限制
             if retry_count >= 3:
                 logging.error(f'🚫 已达到最大换号次数(3次)，无法继续获取新账号')
-                raise Exception(f'❌ 已达到最大换号次数(3次)，无法继续获取新账号')
+                return False
                 
             await to_notify_account_error(self.account, error_name, error_info)
             logging.info(f'🔄 开始更换账号... (第{retry_count+1}次尝试)')
@@ -310,7 +311,7 @@ class SearchTask:
             # 获取新账号
             self.account = await self.account_pool.acquire()
             if not self.account:
-                raise Exception(f'❌ 无法获取新账号')
+                return
 
             # 创建新客户端
             self.client = await self.client_manager.get_client(
