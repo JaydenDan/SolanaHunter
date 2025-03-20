@@ -124,8 +124,8 @@ class MonitorCore:
                     count = result[0]['COUNT(*)'] if result else 0
                     data['entrepreneurial_attempts_count'] = count
                     data['dev_balance'] = dev_balance
-                # 分别查询token_creation表中是否有相同的symbol的记录
-                query = "SELECT COUNT(*) FROM token_creation WHERE symbol = %s"
+                # 分别查询token_creation表中是否有相同的symbol的记录 TODO 给symbol加索引
+                query = "SELECT COUNT(*) FROM token_creation WHERE symbol = %s COLLATE utf8mb4_general_ci"
                 result = await self.mysql_manager.execute_query(query, (data['symbol'],))
                 count = result[0]['COUNT(*)'] if result else 0
                 data['symbol_count'] = count    
