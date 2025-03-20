@@ -161,6 +161,8 @@ class SearchTask:
                         "mint": data["mint"],
                         # 交易者公钥
                         "traderPublicKey": data["traderPublicKey"],
+                        # DEV 钱包余额
+                        "dev_balance": data["dev_balance"],
                         # DEV创业次数
                         "entrepreneurial_attempts_count": data["entrepreneurial_attempts_count"],
                         # 相同代币符号数量
