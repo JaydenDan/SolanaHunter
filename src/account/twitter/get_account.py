@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from src.database.redis.redis_manager import RedisManager
 from src.account.twitter.get_client import TwitterClientManager
 from src.notifier.notification_processor import to_notify_account_report
+from config.config_loader import get_config
 
 
 @dataclass
@@ -19,6 +20,7 @@ class TwitterAccount:
     password: str
     username: str
     proxy: str
+    totp_secret: str
     in_use: bool = False
     disabled: bool = False
 
@@ -59,7 +61,7 @@ class AccountPool:
             df = pd.read_excel(self.excel_path)
             # 清空现有账号列表
             self._accounts.clear()
-            reverse = True
+            reverse = get_config('TWITTER.account_reverse_load')
             # 根据reverse参数决定循环方向
             if reverse:
                 # 反向循环 (从后往前) 
@@ -67,10 +69,11 @@ class AccountPool:
                 for i in range(len(df)-1, -1, -1):
                     row = df.iloc[i]
                     account = TwitterAccount(
-                        email=row['email'],
-                        username=row['username'],
-                        password=row['password'],
-                        proxy=row['residential_proxy'],
+                        email=str(row['email']) if not pd.isna(row['email']) else "",
+                        username=str(row['username']) if not pd.isna(row['username']) else "",
+                        password=str(row['password']) if not pd.isna(row['password']) else "",
+                        proxy=str(row['residential_proxy']) if not pd.isna(row['residential_proxy']) else "",
+                        totp_secret=str(row['totp_secret']) if not pd.isna(row['totp_secret']) else "",
                     )
                     self._accounts.append(account)
             else:
@@ -78,10 +81,11 @@ class AccountPool:
                 logging.info("📊 以正向顺序加载账号 (从前往后) ")
                 for _, row in df.iterrows():
                     account = TwitterAccount(
-                        email=row['email'],
-                        username=row['username'],
-                        password=row['password'],
-                        proxy=row['residential_proxy'],
+                        email=str(row['email']) if not pd.isna(row['email']) else "",
+                        username=str(row['username']) if not pd.isna(row['username']) else "",
+                        password=str(row['password']) if not pd.isna(row['password']) else "",
+                        proxy=str(row['residential_proxy']) if not pd.isna(row['residential_proxy']) else "",
+                        totp_secret=str(row['totp_secret']) if not pd.isna(row['totp_secret']) else "",
                     )
                     self._accounts.append(account)
                 
@@ -101,6 +105,7 @@ class AccountPool:
                     'username': acc.username,
                     'password': acc.password,
                     'proxy': acc.proxy,
+                    'totp_secret': acc.totp_secret,
                     'in_use': acc.in_use,
                     'disabled': acc.disabled
                 }
@@ -122,14 +127,15 @@ class AccountPool:
             
             # 加载新账号数据并保留原状态
             for _, row in df.iterrows():
-                email = row['email']
+                email = str(row['email']) if not pd.isna(row['email']) else ""
                 new_emails.add(email)
                 
                 account = TwitterAccount(
                     email=email,
-                    username=row['username'],
-                    password=row['password'],
-                    proxy=row['residential_proxy'],
+                    username=str(row['username']) if not pd.isna(row['username']) else "",
+                    password=str(row['password']) if not pd.isna(row['password']) else "",
+                    proxy=str(row['residential_proxy']) if not pd.isna(row['residential_proxy']) else "",
+                    totp_secret=str(row['totp_secret']) if not pd.isna(row['totp_secret']) else "",
                 )
                 
                 # 检查是否修改了账号信息
@@ -147,7 +153,8 @@ class AccountPool:
                         changes.append(f"密码: {'*'*6} -> {'*'*6}")  # 不显示实际密码
                     if account.proxy != original['proxy']:
                         changes.append(f"代理: {original['proxy']} -> {account.proxy}")
-                    
+                    if account.totp_secret != original['totp_secret']:
+                        changes.append(f"2FA密钥: {original['totp_secret']} -> {account.totp_secret}")
                     if changes:
                         modified_accounts.append((email, changes))
                 else:
@@ -350,7 +357,8 @@ class AccountPool:
                 email=account.email,
                 username=account.username,
                 password=account.password,
-                proxy=account.proxy
+                proxy=account.proxy,
+                totp_secret=account.totp_secret
             )
             if client is None:
                 logging.error(f"❌ 账号【{account.email}】获取Twikit Client失败")

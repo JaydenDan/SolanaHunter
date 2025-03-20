@@ -283,27 +283,3 @@ class AsyncTransactionContextManager:
 
 # 创建默认实例
 mysql_manager = MySQLManager()
-
-# 使用示例
-if __name__ == "__main__":
-    # 异步使用示例
-    async def test_async():
-        # 简单异步查询
-        users = await mysql_manager.execute_query("SELECT * FROM users LIMIT 10")
-        for user in users:
-            print(user)
-        
-        # 插入数据
-        user_id = await mysql_manager.insert('users', {
-            'name': '李四',
-            'email': 'lisi@example.com',
-            'created_at': time.strftime('%Y-%m-%d %H:%M:%S')
-        })
-        print(f"插入的用户ID: {user_id}")
-        
-        # 使用异步事务
-        async with await mysql_manager.transaction() as cursor:
-            await cursor.execute("INSERT INTO logs (message) VALUES (%s)", ("测试日志",))
-            await cursor.execute("UPDATE statistics SET count = count + 1 WHERE name = %s", ("visit",))
-    
-    # asyncio.run(test_async()) 
