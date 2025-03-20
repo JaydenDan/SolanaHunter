@@ -5,7 +5,7 @@
 # 配置
 APP_NAME="Solana Hunter"
 PYTHON_CMD="python3"
-MAIN_SCRIPT="src/main.py"
+MAIN_SCRIPT="main.py"
 PID_FILE="hunter.pid"
 
 # 颜色定义

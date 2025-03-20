@@ -124,6 +124,11 @@ class MonitorCore:
                     count = result[0]['COUNT(*)'] if result else 0
                     data['entrepreneurial_attempts_count'] = count
                     data['dev_balance'] = dev_balance
+                # 分别查询token_creation表中是否有相同的symbol的记录
+                query = "SELECT COUNT(*) FROM token_creation WHERE symbol = %s"
+                result = await self.mysql_manager.execute_query(query, (data['symbol'],))
+                count = result[0]['COUNT(*)'] if result else 0
+                data['symbol_count'] = count    
 
                 logging.info(
                     f'💰 监听到新的代币：Name=[{data["name"]}] | Symbol=[{data["symbol"]}] | Mint=[{data["mint"]}] | DEV=[{data["traderPublicKey"]} | 创业次数=[{data["entrepreneurial_attempts_count"]}]次'

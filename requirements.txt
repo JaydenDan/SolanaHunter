@@ -12,5 +12,5 @@ httpx~=0.28.1
 solana~=0.36.6
 solders~=0.26.0
 python-dotenv~=1.0.0
-redis[async]~=5.0.0
+redis[async]~=5.2.1
 aiomysql~=0.2.0

@@ -29,7 +29,6 @@ async def _search_words_maker(mint_list):
 class SearchTask:
     def __init__(self, twitter_config: dict, on_finish_callback, on_error_callback, account: TwitterAccount):
         self._task_counter = TaskCounter()
-        self.mint_list = []
         self.token_list = []
         self.lock = asyncio.Lock()
         self.on_finish_callback = on_finish_callback
@@ -66,14 +65,8 @@ class SearchTask:
 
     async def add_token(self, token: dict):
         async with self.lock:
-            if len(self.mint_list) < 10:
-                # 单独保存一份ca列表
-                self.mint_list.append(token["mint"])
-                # 保存一份代币信息列表
-                self.token_list.append({
-                    "mint": token['mint'],
-                    "token": token,
-                })
+            if len(self.token_list) < 10:
+                self.token_list.append(token)
                 return True
             return False
 
@@ -94,125 +87,130 @@ class SearchTask:
 
             logging.info(f'🔛 搜索任务已启动, 使用账号: {self.account.email}')
             while True:
-                await asyncio.sleep(20)
+                # 1. 清理过期mint和token, 放在暂停前是为了不浪费时间
                 async with self.lock:
-                    current_ca = self.mint_list.copy()
-                    self.mint_list.clear()
-
+                    # 清理过期token
                     now = datetime.now()
-                    expired_mints = []
-                    for t in self.token_list:
+                    valid_token_list = []
+                    for token in self.token_list:
                         try:
-                            if (now - t["token"]["detect_time"]).total_seconds() > 600:
-                                expired_mints.append(t["mint"])
+                            # 检查是否过期并直接过滤
+                            if (now - token["detect_time"]).total_seconds() < 580:
+                                valid_token_list.append(token)
                         except Exception as e:
                             logging.error(f"❌ 清理超时CA失败: {str(e)}", exc_info=True)
                             logging.error(f"❌ 当前token_list: {self.token_list}")
-                            logging.error(f"❌ 当前token: {t}")
-                            expired_mints = []
-                    self.token_list = [
-                        t for t in self.token_list
-                        if t["mint"] not in expired_mints
-                    ]
-                    current_ca = [
-                        ca for ca in current_ca
-                        if ca not in expired_mints
-                    ]
-
-                remaining_mint_list = []
-                if current_ca:
-                    remaining_mint_list = await self._monitor_social_data(current_ca)
-
+                            logging.error(f"❌ 当前token: {token}")
+                            # 出错时保留该token
+                            valid_token_list.append(token)
+                    self.token_list = valid_token_list
+                await asyncio.sleep(20)
+                # 2. 监控社交媒体数据
                 async with self.lock:
-                    self.mint_list.extend(remaining_mint_list)
-                    if not self.mint_list and not self.token_list:
+                    await self._monitor_social_data()
+                    if not self.token_list:
                         logging.info(f'🏁 搜索任务已完成, 释放账号: {self.account.email}')
                         await self.account_pool.release_account(self.account, True)
                         break
         except Exception as e:
             logging.error(f'❌ 搜索任务运行错误: {str(e)} 剩余Token已回滚到待处理队列')
             # 只传递原始token列表
-            original_tokens = [t["token"] for t in self.token_list]
-            await self.on_error_callback(original_tokens)
+            await self.on_error_callback(self.token_list)
             await self.account_pool.release_account(self.account, False)
         finally:
             await self.on_finish_callback(self, self.account.email)
 
-    async def _monitor_social_data(self, current_mint_list: list):
+    async def _monitor_social_data(self):
         """监控CA的推特帖子, 然后对有帖子的CA进行操作"""
-        remaining_mint = current_mint_list.copy()
         try:
-            if not current_mint_list:
+            if not self.token_list:
                 return []
+            
+            # 创建查找映射和集合，避免重复查询
+            token_map = {token["mint"]: token for token in self.token_list}
+            mint_set = set(token_map.keys())
+            
+            # 要删除的mint集合
+            processed_mints = set()
+            
             # 生成搜索关键字
-            search_words = await _search_words_maker(current_mint_list)
+            search_words = await _search_words_maker(list(mint_set))
+            
             # 搜索帖子
             tweets = await self._search_tweets(str(search_words), "Latest")
-            mint_set = set(current_mint_list)
-            for t in tweets:
-                tweet_mint_list = common_util.get_mint_in_tweet(t['text'])
-                for tweet_mint in tweet_mint_list:
-                    logging.info(f'🔍️ 当前搜索到的推特帖子内容为:\n【{t["text"]}】')
-                    if tweet_mint in mint_set:
-                        # 根据mint在token_list中查找token完整信息
-                        matched_item = next(
-                            (item for item in self.token_list
-                             if item.get("mint") == tweet_mint),
-                            None  # 找不到时返回 None
-                        ) 
-                        if matched_item is None:
-                            logging.warning(f'⚠️ 未找到匹配的 token, CA: {tweet_mint}, 可能是一个CA有多个推文, 在前一个推文触发时已将该CA移出列表。')
-                            continue  # 跳过或执行其他逻辑
-                        data = matched_item['token']
-                        logging.info(f'CA反搜索到的数据【{data}】')
-                        if data:
-                            context = {
-                                # 交易签名（唯一标识）
-                                "signature": data["signature"],
-                                # 代币合约地址
-                                "mint": data["mint"],
-                                # 交易者公钥
-                                "traderPublicKey": data["traderPublicKey"],
-                                # DEV创业次数
-                                "entrepreneurial_attempts_count": data["entrepreneurial_attempts_count"],
-                                # 交易类型（create/swap等）
-                                "txType": data["txType"],
-                                # 初始购买金额（SOL）
-                                "initialBuy": data["initialBuy"],
-                                # 当前交易SOL金额
-                                "solAmount": data["solAmount"],
-                                # 该代币采用的 Bonding Curve (弹性定价模型) 的合约地址。Bonding Curve 通过数学公式决定代币的价格。
-                                "bondingCurveKey": data["bondingCurveKey"],
-                                # 盘子代币存量
-                                "vTokensInBondingCurve": data["vTokensInBondingCurve"],
-                                # 盘子SOL存量
-                                "vSolInBondingCurve": data["vSolInBondingCurve"],
-                                # 市值（SOL计价）
-                                "marketCapSol": data["marketCapSol"],
-                                # 代币名称
-                                "name": data["name"],
-                                # 代币符号
-                                "symbol": data["symbol"],
-                                # 代币元数据URI
-                                "uri": data["uri"],
-                                # 所属交易池
-                                "pool": data["pool"],
-                                # 检测时间
-                                "detect_time": data["detect_time"],  
-                                # 社交媒体数据（异步获取）
-                                "social": t
-                            }
-                            await to_notify_token(context)
-                            if tweet_mint in remaining_mint:
-                                remaining_mint.remove(tweet_mint)
-                                # 删除已处理的token信息
-                                self.token_list = [item for item in self.token_list if item.get("mint") != tweet_mint]
-                    else:
-                        logging.warning(f"⚠️ 当前推特中的CA【{tweet_mint}】不在CA监控名单中, 请检查程序逻辑！")
-            return remaining_mint
+            
+            # 遍历搜索到的帖子
+            for tweet in tweets:
+                # 分离帖子中的ca
+                tweet_mint_list = common_util.get_mint_in_tweet(tweet['text'])
+                
+                # 过滤出我们关心的且尚未处理的mint
+                relevant_mints = [m for m in tweet_mint_list if m in mint_set and m not in processed_mints]
+                
+                if not relevant_mints:
+                    continue
+                    
+                logging.info(f'🔍️ 当前搜索到的推特帖子内容为:\n【{tweet["text"]}】')
+                
+                # 一次处理一个推文中的所有相关mint
+                for tweet_mint in relevant_mints:
+                    data = token_map.get(tweet_mint)
+                    
+                    if not data:
+                        logging.warning(f'⚠️ 未找到匹配的 token, CA: {tweet_mint}')
+                        continue
+                        
+                    logging.debug(f'CA反搜索到的数据【{data}】')
+                    
+                    context = {
+                        # 交易签名（唯一标识）
+                        "signature": data["signature"],
+                        # 代币合约地址
+                        "mint": data["mint"],
+                        # 交易者公钥
+                        "traderPublicKey": data["traderPublicKey"],
+                        # DEV创业次数
+                        "entrepreneurial_attempts_count": data["entrepreneurial_attempts_count"],
+                        # 相同代币符号数量
+                        "symbol_count": data["symbol_count"],
+                        # 交易类型（create/swap等）
+                        "txType": data["txType"],
+                        # 初始购买金额（SOL）
+                        "initialBuy": data["initialBuy"],
+                        # 当前交易SOL金额
+                        "solAmount": data["solAmount"],
+                        # 该代币采用的 Bonding Curve (弹性定价模型) 的合约地址。Bonding Curve 通过数学公式决定代币的价格。
+                        "bondingCurveKey": data["bondingCurveKey"],
+                        # 盘子代币存量
+                        "vTokensInBondingCurve": data["vTokensInBondingCurve"],
+                        # 盘子SOL存量
+                        "vSolInBondingCurve": data["vSolInBondingCurve"],
+                        # 市值（SOL计价）
+                        "marketCapSol": data["marketCapSol"],
+                        # 代币名称
+                        "name": data["name"],
+                        # 代币符号
+                        "symbol": data["symbol"],
+                        # 代币元数据URI
+                        "uri": data["uri"],
+                        # 所属交易池
+                        "pool": data["pool"],
+                        # 检测时间
+                        "detect_time": data["detect_time"],  
+                        # 社交媒体数据（异步获取）
+                        "social": tweet  # 注意这里改为tweet而不是t
+                    }
+                    
+                    await to_notify_token(context)
+                    processed_mints.add(tweet_mint)
+            
+            # 批量删除已处理的tokens
+            if processed_mints:
+                self.token_list = [token for token in self.token_list 
+                                  if token.get("mint") not in processed_mints]
+                
         except Exception as e:
             logging.error(f"❌ 社交媒体数据获取失败: {str(e)}", exc_info=True)
-            return remaining_mint
 
     async def _search_tweets(self, query: str, product: str) -> list:
         """
