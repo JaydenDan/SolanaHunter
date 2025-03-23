@@ -1,0 +1,18 @@
+{
+  "rules": [
+    {
+      "id": "twitter_all_notify",
+      "name": "推特所有通知",
+      "description": "代币有推特帖子就推送",
+      "enable": true,
+      "condition": {
+        "type": "exists",
+        "field": "social"
+      },
+      "action": {
+        "type": "notify",
+        "channel": 1345252024413065322
+      }
+    }
+  ]
+} 

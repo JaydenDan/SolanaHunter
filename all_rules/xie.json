@@ -1,0 +1,198 @@
+{
+	"rules": [
+		{
+            "id": "dev_balance_and_attempts_with_twitter_rule",
+            "name": "开发者余额大于5 SOL且创业次数小于1（推特）",
+            "enable": true,
+            "condition": {
+                "type": "and",
+                "conditions": [
+                    {
+                        "type": ">",
+                        "field": "dev_balance",
+                        "value": 5
+                    },
+                    {
+                        "type": "<",
+                        "field": "entrepreneurial_attempts_count",
+                        "value": 1
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social"
+                    }
+                ]
+            },
+            "action": {
+                "type": "notify",
+                "channel": "1350474021073981541"
+            }
+        },
+		{
+			"id": "low_entrepreneurial_attempts_with_smart_money_or_money_tweet",
+			"name": "创业次数<1且推文包含'聪明钱'或'money'",
+			"enable": true,
+			"condition": {
+				"type": "and",
+				"conditions": [
+					{
+						"type": "<",
+						"field": "entrepreneurial_attempts_count",
+						"value": 1
+					},
+					{
+						"type": "exists",
+						"field": "social"
+					},
+					{
+						"type": "or",
+						"conditions": [
+							{
+								"type": "string_contains",
+								"source_field": "social.text",
+								"value": "聪明钱"
+							},
+							{
+								"type": "string_contains",
+								"source_field": "social.text",
+								"value": "money"
+							}
+						]
+					}
+				]
+			},
+			"action": {
+				"type": "notify",
+				"channel": "1350713883064795237"
+			}
+		},
+        {
+            "id": "low_entrepreneurial_attempts_with_twitter",
+            "name": "创业次数小于1且验证推特",
+            "enable": true,
+            "condition": {
+                "type": "and",
+                "conditions": [
+                    {
+                        "type": "<",
+                        "field": "entrepreneurial_attempts_count",
+                        "value": 1
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social"
+                    }
+                ]
+            },
+            "action": {
+                "type": "notify",
+                "channel": "1352640987251609650"
+            }
+        },
+        {
+            "id": "low_entrepreneurial_attempts_twitter_1k_3k",
+            "name": "创业次数小于1且推特粉丝数1k-3k",
+            "enable": true,
+            "condition": {
+                "type": "and",
+                "conditions": [
+                    {
+                        "type": "<",
+                        "field": "entrepreneurial_attempts_count",
+                        "value": 1
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social"
+                    },
+                    {
+                        "type": "and",
+                        "conditions": [
+                            {
+                                "type": ">=",
+                                "field": "social.user.followers_count",
+                                "value": 1000
+                            },
+                            {
+                                "type": "<",
+                                "field": "social.user.followers_count",
+                                "value": 3000
+                            }
+                        ]
+                    }
+                ]
+            },
+            "action": {
+                "type": "notify",
+                "channel": "1352645588419743796"
+            }
+        },
+        {
+            "id": "low_entrepreneurial_attempts_twitter_3k_5k",
+            "name": "创业次数小于1且推特粉丝数3k-5k",
+            "enable": true,
+            "condition": {
+                "type": "and",
+                "conditions": [
+                    {
+                        "type": "<",
+                        "field": "entrepreneurial_attempts_count",
+                        "value": 1
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social"
+                    },
+                    {
+                        "type": "and",
+                        "conditions": [
+                            {
+                                "type": ">=",
+                                "field": "social.user.followers_count",
+                                "value": 3000
+                            },
+                            {
+                                "type": "<",
+                                "field": "social.user.followers_count",
+                                "value": 5000
+                            }
+                        ]
+                    }
+                ]
+            },
+            "action": {
+                "type": "notify",
+                "channel": "1352645911871754344"  
+            }
+        },
+        {
+            "id": "low_entrepreneurial_attempts_twitter_5k_plus",
+            "name": "创业次数小于1且推特粉丝数5k以上",
+            "enable": true,
+            "condition": {
+                "type": "and",
+                "conditions": [
+                    {
+                        "type": "<",
+                        "field": "entrepreneurial_attempts_count",
+                        "value": 1
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social"
+                    },
+                    {
+                        "type": ">=",
+                        "field": "social.user.followers_count",
+                        "value": 5000
+                    }
+                ]
+            },
+            "action": {
+                "type": "notify",
+                "channel": "1352646770298982400"  
+            }
+        }
+
+    ]
+}
