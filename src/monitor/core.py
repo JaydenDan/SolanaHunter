@@ -123,11 +123,17 @@ class MonitorCore:
                 data['entrepreneurial_attempts_count'] = entrepreneurial_attempts_count
                 data['dev_balance'] = dev_balance
 
-                # 查询token_creation表中是否有相同的symbol的记录 TODO 给symbol加索引
+                # 查询token_creation表中是否有相同的name的记录 TODO 给symbol加索引
                 query = "SELECT COUNT(*) FROM token_creation WHERE `name` = %s COLLATE utf8mb4_general_ci"
                 result = await self.mysql_manager.execute_query(query, (data['name'],))
                 name_count = result[0]['COUNT(*)'] if result else 0
                 data['name_count'] = name_count
+
+                # 查询token_creation表中是否有相同symbol的记录
+                query = "SELECT COUNT(*) FROM token_creation WHERE symbol = %s COLLATE utf8mb4_general_ci"
+                result = await self.mysql_manager.execute_query(query, (data['symbol'],))
+                symbol_count = result[0]['COUNT(*)'] if result else 0
+                data['symbol_count'] = symbol_count
 
                 logging.info(
                     f'💰 监听到新的代币：Name=[{data["name"]}] | Symbol=[{data["symbol"]}] | Mint=[{data["mint"]}] | DEV=[{data["traderPublicKey"]} | 创业次数=[{data["entrepreneurial_attempts_count"]}]次'

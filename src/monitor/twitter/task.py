@@ -167,6 +167,8 @@ class SearchTask:
                         "entrepreneurial_attempts_count": data["entrepreneurial_attempts_count"],
                         # 相同代币符号数量
                         "symbol_count": data["symbol_count"],
+                        # 相同代币名称数量
+                        "name_count": data["name_count"],
                         # 交易类型（create/swap等）
                         "txType": data["txType"],
                         # 初始购买金额（SOL）
