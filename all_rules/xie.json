@@ -193,57 +193,34 @@
                 "channel": "1352646770298982400"  
             }
         },
-        {
-			"id": "name_count_and_dev_attempts",
-			"name": "代币名称唯一且DEV创业次数限制",
-			"enable": true,
-			"condition": {
-				"type": "and",
-				"conditions": [
-					{
-						"type": "<=",
-						"field": "name_count",
-						"value": 1
-					},
-					{
-						"type": "<=",
-						"field": "entrepreneurial_attempts_count",
-						"value": 2
-					}
-				]
-			},
-			"action": {
-				"type": "notify",
-				"channel": "1352156443427471441"
-			}
-		},
-		{
-			"id": "name_count_dev_attempts_twitter",
-			"name": "代币名称唯一+DEV创业限制+推特存在",
-			"enable": true,
-			"condition": {
-				"type": "and",
-				"conditions": [
-					{
-						"type": "<=",
-						"field": "name_count",
-						"value": 1
-					},
-					{
-						"type": "<=",
-						"field": "entrepreneurial_attempts_count",
-						"value": 2
-					},
-					{
-						"type": "exists",
-						"field": "social"
-					}
-				]
-			},
-			"action": {
-				"type": "notify",
-				"channel": "1353651367192821770"
-			}
-		}
+         {
+            "id": "low_frequency_token",
+            "name": "低频次代币检测",
+            "enable": true,
+            "condition": {
+                "type": "and",
+                "conditions": [
+                    {
+                        "type": "<",
+                        "field": "name_count",
+                        "value": 1
+                    },
+                    {
+                        "type": "<",
+                        "field": "symbol_count",
+                        "value": 5
+                    },
+                    {
+                        "type": "<=",
+                        "field": "entrepreneurial_attempts_count",
+                        "value": 1
+                    }
+                ]
+            },
+            "action": {
+                "type": "notify",
+                "channel": "1352156443427471441"
+            }
+        }
     ]
 }
