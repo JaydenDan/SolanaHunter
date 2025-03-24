@@ -98,16 +98,9 @@ class SearchTaskManager:
             token_add_failed = []
             
             for token in batch:
-                if len(new_task.mint_list) < 10:
-                    # 添加到新任务
-                    new_task.mint_list.append(token["mint"])
-                    new_task.token_list.append({
-                        "mint": token['mint'],
-                        "token": token,
-                    })
+                if new_task.add_token(token):
                     token_added.append(token)
                 else:
-                    # 任务已满, 剩余的CA加入失败列表, 理论上不会发生
                     token_add_failed.append(token)
             
             # 处理未能添加的CA, 理论上不会发生
@@ -166,9 +159,3 @@ class SearchTaskManager:
             logging.info(f'📴 已关闭搜索协程【{task_email}】')
         except ValueError:
             logging.warning(f'⚠️ 尝试移除不存在的任务: {task_to_remove}')
-
-    async def recycle_token(self, token_to_recycle):
-        """回收CA到等待列表"""
-        async with self._pending_lock:
-            self._pending_token_list = token_to_recycle + self._pending_token_list
-
