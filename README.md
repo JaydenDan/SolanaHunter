@@ -331,6 +331,8 @@ results = engine.evaluate(token_data)
     "traderPublicKey": "交易者公钥",
     "dev_balance": "开发者余额",
     "entrepreneurial_attempts_count": "DEV创业次数",
+    "symbol_count": "相同代币符号数量",
+    "name_count": "相同代币名称数量",
     "txType": "交易类型（create/swap等）",
     "initialBuy": "初始购买金额（SOL）",
     "solAmount": "当前交易SOL金额",
