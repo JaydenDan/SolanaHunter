@@ -230,7 +230,7 @@
                 "type": "and",
                 "conditions": [
                     {
-                        "type": "<",
+                        "type": "<=",
                         "field": "name_count",
                         "value": 1
                     },
