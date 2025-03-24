@@ -221,6 +221,39 @@
                 "type": "notify",
                 "channel": "1352156443427471441"
             }
+        },
+         {
+            "id": "new_token_with_twitter",
+            "name": "新代币推特检测",
+            "enable": true,
+            "condition": {
+                "type": "and",
+                "conditions": [
+                    {
+                        "type": "<",
+                        "field": "name_count",
+                        "value": 1
+                    },
+                    {
+                        "type": "<",
+                        "field": "symbol_count",
+                        "value": 5
+                    },
+                    {
+                        "type": "<=",
+                        "field": "entrepreneurial_attempts_count",
+                        "value": 1
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social"
+                    }
+                ]
+            },
+            "action": {
+                "type": "notify",
+                "channel": "1353651367192821770"
+            }
         }
     ]
 }
