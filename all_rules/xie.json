@@ -292,6 +292,34 @@
                 "type": "notify",
                 "channel": "1354345464593383534"
             }
+        },
+        {
+            "id": "unique_symbol_dev_balance_with_twitter",
+            "name": "唯一符号且开发者余额大于1且有推特",
+            "enable": true,
+            "condition": {
+                "type": "and",
+                "conditions": [
+                    {
+                        "type": "<",
+                        "field": "symbol_count",
+                        "value": 1
+                    },
+                    {
+                        "type": ">",
+                        "field": "dev_balance",
+                        "value": 1
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social"
+                    }
+                ]
+            },
+            "action": {
+                "type": "notify",
+                "channel": "1354817659501543605"
+            }
         }
     ]
 }
