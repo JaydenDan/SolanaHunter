@@ -56,7 +56,7 @@ async def to_notify_token(token_data):
         rule_engine = RuleEngine()  # 单例模式会返回已初始化的实例
         
         # 评估规则 - 直接使用原始token_data，不修改原始数据
-        triggered_rules = rule_engine.evaluate(token_data)
+        triggered_rules = await rule_engine.evaluate(token_data)
 
         # 记录触发的规则
         for rule in triggered_rules:
@@ -67,6 +67,13 @@ async def to_notify_token(token_data):
                 "rule_name": rule["rule_name"],
                 "channel": rule["channel"],
             }
+            
+            # 如果存在交易结果，添加到通知中
+            if "transaction_result" in rule:
+                notification["transaction_result"] = rule["transaction_result"]
+                # 记录交易结果
+                transaction_status = rule["transaction_result"].get("status", "未知")
+                logging.info(f"代币交易: {token_data['mint']} - 状态: {transaction_status} - 规则: {rule['rule_id']}")
             
             # 将通知内容序列化为JSON，使用自定义编码器处理复杂对象
             notification_json = safe_json_dumps(notification)

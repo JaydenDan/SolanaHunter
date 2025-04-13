@@ -69,6 +69,10 @@ class RuleLoader:
         if 'channel' not in rule['action']:
             return False, "动作缺少channel字段"
         
+        # 验证交易字段（如果存在）
+        if 'transaction' in rule['action'] and not isinstance(rule['action']['transaction'], bool):
+            return False, "transaction字段必须是布尔值"
+        
         return True, "验证通过"
     
     def _validate_condition(self, condition):

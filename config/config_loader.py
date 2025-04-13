@@ -74,6 +74,12 @@ def load_config():
         "BLOCKCHAIN_RPC": {
             "solana_official_rpc_url": os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com"),
         },
+
+        # 交易API配置
+        "TRANSACTION_API": {
+            "url": os.getenv("TRANSACTION_API_URL", "https://pumpportal.fun/api/transaction"),
+            "key": os.getenv("TRANSACTION_API_KEY", ""),
+        },
     }
     
     return config

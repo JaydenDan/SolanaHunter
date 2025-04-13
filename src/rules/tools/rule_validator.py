@@ -177,6 +177,10 @@ class RuleValidator:
             
         if "channel" not in action:
             errors.append(f"规则 #{rule_idx}: action缺少'channel'字段")
+        
+        # 校验transaction字段 - 如果存在则必须是布尔值
+        if "transaction" in action and not isinstance(action["transaction"], bool):
+            errors.append(f"规则 #{rule_idx}: action的'transaction'字段必须是布尔值")
             
         return errors
 

@@ -1,0 +1,63 @@
+{
+    "rules": [
+        {
+            "id": "high_value_token_with_transaction",
+            "name": "高价值代币交易示例",
+            "enable": true,
+            "condition": {
+                "type": "and",
+                "conditions": [
+                    {
+                        "type": ">",
+                        "field": "price",
+                        "value": 1000
+                    },
+                    {
+                        "type": ">",
+                        "field": "dev_balance",
+                        "value": 5
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social"
+                    }
+                ]
+            },
+            "action": {
+                "type": "notify",
+                "channel": "1350474021073981541",
+                "transaction": true
+            }
+        },
+        {
+            "id": "unique_symbol_transaction",
+            "name": "唯一符号代币交易示例",
+            "enable": true,
+            "condition": {
+                "type": "and",
+                "conditions": [
+                    {
+                        "type": "<",
+                        "field": "symbol_count",
+                        "value": 1
+                    },
+                    {
+                        "type": ">",
+                        "field": "dev_balance",
+                        "value": 3
+                    },
+                    {
+                        "type": "<",
+                        "field": "entrepreneurial_attempts_count",
+                        "value": 2
+                    }
+                ]
+            },
+            "action": {
+                "type": "notify",
+                "channel": "1354345464593383534",
+                "transaction": false
+            }
+        }
+    ]
+}

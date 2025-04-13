@@ -1,8 +1,14 @@
 import logging
 import os
+from datetime import datetime
+import aiohttp  # 导入aiohttp库
+import json
+import asyncio
+from config.config_loader import get_config
 
 from src.rules.rule_loader import RuleLoader
 from src.rules.watcher import RuleWatcher
+
 
 class RuleEngine:
     """增强的规则引擎，支持复杂条件判断（单例模式）"""
@@ -63,11 +69,9 @@ class RuleEngine:
         except Exception as e:
             logging.error(f"❌ 规则更新失败: {str(e)}", exc_info=True)
     
-    def evaluate(self, token_data):
+    async def evaluate(self, token_data):
         """评估代币是否需要通知及通知渠道"""
         results = []
-        # 根据数据中是否存在social对象判断作用域
-        rule_scope = "with_twitter" if token_data.get("social") else "without_twitter"
         
         for rule in self.rules:
             # 跳过不适用的规则
@@ -76,12 +80,20 @@ class RuleEngine:
                 
             # 评估规则条件
             if self._evaluate_condition(rule["condition"], token_data):
-                results.append({
+                result = {
                     "rule_name": rule["name"],
                     "rule_id": rule["id"],
                     "action": rule["action"],
                     "channel": rule["action"].get("channel")
-                })
+                }
+                
+                # 检查是否需要执行交易
+                if rule["action"].get("transaction", False):
+                    # 执行交易操作
+                    transaction_result = await self._execute_transaction(token_data, rule)
+                    result["transaction_result"] = transaction_result
+                
+                results.append(result)
                 
         return results
     
@@ -179,3 +191,55 @@ class RuleEngine:
                 return False
                 
         return True
+    
+    async def _execute_transaction(self, token_data, rule):
+        """异步执行代币交易操作
+        
+        Args:
+            token_data: 代币数据
+            rule: 触发的规则
+            
+        Returns:
+            Dict: 交易结果信息
+        """
+        try:
+            # 从环境变量获取API URL和密钥
+            api_url = f"{get_config('TRANSACTION_API.url')}/register"
+            api_key = get_config("TRANSACTION_API.key")
+            
+            if not api_url or not api_key:
+                raise ValueError("环境变量中缺少TRANSACTION_API_URL或TRANSACTION_API_KEY配置")
+            
+            # 获取代币地址
+            token_address = token_data.get("mint")
+            if not token_address:
+                raise ValueError("代币数据中缺少mint字段")
+                
+            # 构建请求数据
+            request_data = {
+                "token": token_address
+            }
+            
+            # 设置请求头
+            headers = {
+                "Content-Type": "application/json",
+                "X-API-Key": api_key
+            }
+            
+            # 记录开始调用API
+            logging.info(f"🔄 开始调用交易API: 代币 {token_address}，规则 {rule['id']}")
+            
+            # 调用API
+            async with aiohttp.ClientSession() as session:
+                async with session.post(api_url, json=request_data, headers=headers) as response:
+                    response_status = response.status
+                    response_text = await response.text()
+                    
+                    # 检查响应状态
+                    if response_status == 200:
+                        logging.info(f"✅ 交易API调用成功: 代币 {token_address}")
+                    else:
+                        logging.error(f"❌ 交易API调用失败: 状态码 {response_status}, 响应 {response_text}")
+
+        except Exception as e:
+            logging.error(f"❌ 执行交易调用失败: {str(e)}", exc_info=True)

@@ -252,6 +252,7 @@
             },
             "action": {
                 "type": "notify",
+                "transaction": true,
                 "channel": "1353651367192821770"
             }
         },
