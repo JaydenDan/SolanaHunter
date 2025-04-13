@@ -90,8 +90,7 @@ class RuleEngine:
                 # 检查是否需要执行交易
                 if rule["action"].get("transaction", False):
                     # 执行交易操作
-                    transaction_result = await self._execute_transaction(token_data, rule)
-                    result["transaction_result"] = transaction_result
+                    await self._execute_transaction(token_data, rule)
                 
                 results.append(result)
                 
