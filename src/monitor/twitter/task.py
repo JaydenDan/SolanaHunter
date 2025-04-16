@@ -79,7 +79,7 @@ class SearchTask:
             while True:
                 # 1. 清理过期mint和token, 放在暂停前是为了不浪费时间
                 if not self.client:
-                    raise Exception(f'❌ 客户端初始化失败, 无法继续搜索')
+                    raise Exception(f'❌ 客户端初始化失败（可能账号池已耗尽）, 无法继续搜索')
                 async with self.lock:
                     # 清理过期token
                     now = datetime.now()
@@ -87,7 +87,7 @@ class SearchTask:
                     for token in self.token_list:
                         try:
                             # 检查是否过期并直接过滤
-                            if (now - token["detect_time"]).total_seconds() < 580:
+                            if (now - token["detect_time"]).total_seconds() < 340:
                                 valid_token_list.append(token)
                         except Exception as e:
                             logging.error(f"❌ 清理超时CA失败: {str(e)}", exc_info=True)
@@ -117,43 +117,40 @@ class SearchTask:
         try:
             if not self.token_list:
                 return []
-            
+
             # 创建查找映射和集合，避免重复查询
             token_map = {token["mint"]: token for token in self.token_list}
             mint_set = set(token_map.keys())
-            
+
             # 要删除的mint集合
             processed_mints = set()
-            
+
             # 生成搜索关键字
             search_words = await _search_words_maker(list(mint_set))
-            
+
             # 搜索帖子
             tweets = await self._search_tweets(str(search_words), "Latest")
-            
+
             # 遍历搜索到的帖子
             for tweet in tweets:
-                # 分离帖子中的ca
-                tweet_mint_list = common_util.get_mint_in_tweet(tweet['text'])
-                
-                # 过滤出我们关心的且尚未处理的mint
-                relevant_mints = [m for m in tweet_mint_list if m in mint_set and m not in processed_mints]
-                
-                if not relevant_mints:
-                    continue
-                    
-                logging.info(f'🔍️ 当前搜索到的推特帖子内容为:\n【{tweet["text"]}】')
-                
-                # 一次处理一个推文中的所有相关mint
-                for tweet_mint in relevant_mints:
-                    data = token_map.get(tweet_mint)
-                    
-                    if not data:
-                        logging.warning(f'⚠️ 未找到匹配的 token, CA: {tweet_mint}')
+                logging.info(f'🔍️ 当前搜索到的推特帖子内容为:\\n【{tweet["text"]}】')
+
+                # 遍历我们关心的 mint 地址
+                for mint_to_check in mint_set:
+                    # 如果这个 mint 已经处理过，或者不存在于当前推文中，则跳过
+                    if mint_to_check in processed_mints or mint_to_check not in tweet['text']:
                         continue
-                        
+
+                    # 获取对应的 token 数据
+                    data = token_map.get(mint_to_check)
+
+                    if not data:
+                        # 理论上不应该发生，因为 mint_to_check 来自 token_map 的 key
+                        logging.warning(f'⚠️ 未找到匹配的 token (内部逻辑错误), CA: {mint_to_check}')
+                        continue
+
                     logging.debug(f'CA反搜索到的数据【{data}】')
-                    
+
                     context = {
                         # 交易签名（唯一标识）
                         "signature": data["signature"],
@@ -192,19 +189,20 @@ class SearchTask:
                         # 所属交易池
                         "pool": data["pool"],
                         # 检测时间
-                        "detect_time": data["detect_time"],  
+                        "detect_time": data["detect_time"],
                         # 社交媒体数据（异步获取）
                         "social": tweet  # 注意这里改为tweet而不是t
                     }
-                    
+
                     await to_notify_token(context)
-                    processed_mints.add(tweet_mint)
-            
+                    # 标记为已处理，避免在同一批次中重复处理同一个 mint (即使它在不同推文中出现)
+                    processed_mints.add(mint_to_check)
+
             # 批量删除已处理的tokens
             if processed_mints:
-                self.token_list = [token for token in self.token_list 
+                self.token_list = [token for token in self.token_list
                                   if token.get("mint") not in processed_mints]
-                
+
         except Exception as e:
             logging.error(f"❌ 社交媒体数据获取失败: {str(e)}", exc_info=True)
 
@@ -313,7 +311,8 @@ class SearchTask:
             # 获取新账号
             self.account = await self.account_pool.acquire()
             if not self.account:
-                return
+                self.client = None
+                return False
 
             # 创建新客户端
             self.client = await self.client_manager.get_client(
