@@ -321,6 +321,39 @@
                 "type": "notify",
                 "channel": "1354817659501543605"
             }
+        },
+        {
+            "id": "quality_low_frequency_project",
+            "name": "优质低频创业项目（带基础推特验证）",
+            "enable": true,
+            "condition": {
+                "type": "and",
+                "conditions": [
+                    {
+                        "type": "<=",
+                        "field": "name_count",
+                        "value": 3
+                    },
+                    {
+                        "type": "<=",
+                        "field": "entrepreneurial_attempts_count",
+                        "value": 10
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social"
+                    },
+                    {
+                        "type": ">",
+                        "field": "social.user.followers_count",
+                        "value": 200
+                    }
+                ]
+            },
+            "action": {
+                "type": "notify",
+                "channel": "1363361828419272724"
+            }
         }
     ]
 }
