@@ -354,6 +354,187 @@
                 "type": "notify",
                 "channel": "1363361828419272724"
             }
+        },
+        {
+        "id": "founder_twitter",
+        "name": "创始人发币（推特）",
+        "description": "当创始人发推发布代币时触发",
+        "enable": true,
+        "condition": {
+            "type": "and",
+            "conditions": [
+            {
+                "type": "<=",
+                "field": "name_count",
+                "value": 3
+            },
+            {
+                "type": "<=",
+                "field": "entrepreneurial_attempts_count",
+                "value": 1
+            },
+            {
+                "type": "and",
+                "conditions": [
+                    {
+                        "type": ">",
+                        "field": "social.user.followers_count",
+                        "value": 200
+                    },
+                    {
+                        "type": ">",
+                        "field": "social.user.following_count",
+                        "value": 7
+                    }
+                ]
+            },
+            {
+                "type": "exists",
+                "field": "social"
+            },
+            {
+                "type": "or",
+                "conditions": [
+                {
+                    "type": "and",
+                    "conditions": [
+                    {
+                        "type": "string_contains",
+                        "source_field": "social.user.name",
+                        "target_field": "name"
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social.user.display_url"
+                    },
+                    {
+                        "type": "not",
+                        "condition": {
+                        "type": "string_contains",
+                        "source_field": "social.user.expanded_url",
+                        "value": "t.me"
+                        }
+                    }
+                    ]
+                },
+                {
+                    "type": "and",
+                    "conditions": [
+                    {
+                        "type": "string_contains",
+                        "source_field": "social.user.screen_name",
+                        "target_field": "name"
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social.user.display_url"
+                    },
+                    {
+                        "type": "not",
+                        "condition": {
+                        "type": "string_contains",
+                        "source_field": "social.user.expanded_url",
+                        "value": "t.me"
+                        }
+                    }
+                    ]
+                },
+                {
+                    "type": "and",
+                    "conditions": [
+                    {
+                        "type": "string_contains",
+                        "source_field": "social.user.description",
+                        "target_field": "name"
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social.user.display_url"
+                    },
+                    {
+                        "type": "not",
+                        "condition": {
+                        "type": "string_contains",
+                        "source_field": "social.user.expanded_url",
+                        "value": "t.me"
+                        }
+                    }
+                    ]
+                },
+                {
+                    "type": "and",
+                    "conditions": [
+                    {
+                        "type": "string_contains",
+                        "source_field": "social.user.name",
+                        "target_field": "symbol"
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social.user.display_url"
+                    },
+                    {
+                        "type": "not",
+                        "condition": {
+                        "type": "string_contains",
+                        "source_field": "social.user.expanded_url",
+                        "value": "t.me"
+                        }
+                    }
+                    ]
+                },
+                {
+                    "type": "and",
+                    "conditions": [
+                    {
+                        "type": "string_contains",
+                        "source_field": "social.user.screen_name",
+                        "target_field": "symbol"
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social.user.display_url"
+                    },
+                    {
+                        "type": "not",
+                        "condition": {
+                        "type": "string_contains",
+                        "source_field": "social.user.expanded_url",
+                        "value": "t.me"
+                        }
+                    }
+                    ]
+                },
+                {
+                    "type": "and",
+                    "conditions": [
+                    {
+                        "type": "string_contains",
+                        "source_field": "social.user.description",
+                        "target_field": "symbol"
+                    },
+                    {
+                        "type": "exists",
+                        "field": "social.user.display_url"
+                    },
+                    {
+                        "type": "not",
+                        "condition": {
+                        "type": "string_contains",
+                        "source_field": "social.user.expanded_url",
+                        "value": "t.me"
+                        }
+                    }
+                    ]
+                }
+                ]
+            }
+            ]
+        },
+        "action": {
+            "type": "notify",
+            "channel": 1364177718467629086
+            }
         }
     ]
 }
